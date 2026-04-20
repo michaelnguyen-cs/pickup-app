@@ -1,149 +1,177 @@
 # Pick-Up
 
-**Open the app. See where to play, when to play, and whether it's worth going.**
+**Find a game. Show up. Play.**
 
-Pick-Up is a mobile-first sports discovery app. It helps you find nearby pickup games, recurring open gym schedules, sports facilities, and outdoor play conditions — instantly, without signing up for a social network.
+Pick-Up is a mobile app for discovering nearby pickup sports games and venues — open gyms, park runs, and recurring community games — without the noise of a social network.
 
----
-
-## Core Concept
-
-Pick-Up is a **utility-first local sports discovery tool**, not a social media app. The primary value is surfacing existing recurring activity that is already happening in your area — YMCA open gyms, college rec centers, known park pickup games — and presenting it in a fast, map-first experience.
-
-User-generated events exist but are secondary. The app should feel closer to a sports-aware Google Maps than to Instagram.
+Open the app, see what’s happening near you, and go play.
 
 ---
 
-## Target User
+## What It Does
 
-College students, young professionals, and recreational athletes who want to find a game quickly without the overhead of scheduling, friend networks, or app accounts.
+Pickup sports already exist everywhere — rec centers, parks, gyms — but the information is scattered across websites, PDFs, and word-of-mouth.
+
+Pick-Up brings that activity into one place:
+
+* see nearby games on a map
+* understand skill level and turnout
+* decide quickly if it’s worth showing up
+
+It’s closer to a **sports-aware map** than a social app.
 
 ---
 
-## Key Features (MVP)
+## Features
 
-| Feature | Description |
-|---|---|
-| **Home Map** | Full-screen dark map with sport pins, filter chips, and a draggable bottom sheet of nearby venues and runs |
-| **Venue Detail** | Hero image, address, schedule, weather warning (outdoor), best times, amenities, action buttons |
-| **Run Detail** | Recurring run info: schedule breakdown, skill level, turnout, cost, verified badge |
-| **Explore** | Sortable/filterable list view of venues and recurring runs near you |
-| **Saved** | Bookmarked venues and runs |
-| **Profile / Preferences** | Sport preferences, skill level, radius, notifications — no social profile |
-| **Weather Badges** | Compact inline condition pills on outdoor venues (sunny, rainy, windy, etc.) |
-| **Group Chat Entry** | Utility chat rooms tied to venues — for coordination only, no social feed |
+### Discovery
+
+* **Map-first home screen** — full-screen map with sport-filtered pins and a draggable bottom sheet
+* **Explore view** — filterable list of venues and runs with distance and skill level
+* **Venue detail** — location info, tags, and associated runs
+* **Run detail** — schedule, skill level, and expected turnout
+
+### User Data
+
+* **Authentication** — email/password via Supabase with persistent sessions
+* **Saved venues and runs** — synced per user
+* **Attendance** — “I’m Going” stored in `run_attendance`
+* **Preferences** — sports, skill level, indoor/outdoor saved to `profiles`
+* **Reporting** — flag inaccurate runs (“No one was there”, etc.)
+
+### UX
+
+* **Onboarding flow** for preferences
+* **Auth-aware state** (cloud vs local fallback)
+* **Optimistic updates** for saves and attendance
+* **Weather badges** for outdoor runs
 
 ---
 
 ## Tech Stack
 
-| Layer | Choice |
-|---|---|
-| Framework | Expo (managed workflow) |
-| Language | TypeScript |
-| Navigation | React Navigation (native-stack + bottom-tabs) |
-| Map | react-native-maps (Google Maps provider) |
-| Bottom Sheet | @gorhom/bottom-sheet |
-| Gestures | react-native-gesture-handler |
-| Animations | react-native-reanimated |
-| Icons | @expo/vector-icons (Ionicons) |
-| Data (MVP) | Local mock data |
-| Future Backend | Supabase (auth, PostgreSQL, Realtime) |
+| Layer      | Technology                       |
+| ---------- | -------------------------------- |
+| Framework  | Expo (React Native)              |
+| Language   | TypeScript                       |
+| Navigation | React Navigation                 |
+| Map        | react-native-maps                |
+| Backend    | Supabase (Postgres + Auth + RLS) |
+| Storage    | AsyncStorage (guest fallback)    |
 
 ---
 
-## Running Locally
+## Architecture
+
+### Backend (Supabase)
+
+The app uses a typed PostgreSQL schema accessed via `supabase-js`.
+
+**Core tables:**
+
+* `profiles` — user preferences
+* `venues` — physical locations
+* `runs` — recurring time slots
+* `saved_venues` — bookmarked venues
+* `saved_runs` — bookmarked runs
+* `run_attendance` — attendance state
+* `run_reports` — user-submitted accuracy reports
+
+Row Level Security ensures users can only modify their own data.
+
+---
+
+### Context Layer
+
+* `AuthContext` — session + user + profile
+* `SavedContext` — saved items (Supabase + fallback)
+* `PrefsContext` — user preferences
+* `LocationContext` — device location
+
+---
+
+### Data Flow
+
+* Data fetched via `useVenues()` and `useRuns()`
+* Queries live in `src/lib/queries/`
+* Mapping functions convert DB rows → app types
+
+---
+
+## Project Structure
+
+```
+pickup/
+├── src/
+│   ├── components/
+│   ├── screens/
+│   ├── context/
+│   ├── lib/
+│   ├── hooks/
+│   ├── types/
+│   ├── constants/
+│   ├── navigation/
+│   └── utils/
+├── supabase/
+│   ├── schema.sql
+│   └── seed.sql
+└── App.tsx
+```
+
+---
+
+## Setup
+
+### 1. Install
 
 ```bash
-# Prerequisites: Node 18+, Expo CLI, iOS Simulator or Android Emulator or Expo Go app
-
-# 1. Clone / navigate to project
+git clone <repo-url>
 cd pickup
-
-# 2. Install dependencies
 npm install
+```
 
-# 3. Start the dev server
+### 2. Environment
+
+Create `.env.local`:
+
+```
+EXPO_PUBLIC_SUPABASE_URL=your-url
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-key
+```
+
+---
+
+### 3. Database
+
+Run in Supabase SQL Editor:
+
+* `schema.sql`
+* `seed.sql` (optional)
+
+---
+
+### 4. Start
+
+```bash
 npx expo start
-
-# 4. Press 'i' for iOS, 'a' for Android, or scan QR with Expo Go
-```
-
-> **Note:** For the map to render on Android, you need a Google Maps API key in `app.json`. For iOS in dev, the map renders without a key.
-
----
-
-## Folder Structure
-
-```
-src/
-├── components/          # Reusable UI components
-│   ├── VenueCard.tsx        # Primary discovery card (list + sheet variants)
-│   ├── RecurringRunCard.tsx # Core product card for recurring runs
-│   ├── MapPin.tsx           # Custom map markers
-│   ├── SearchBar.tsx        # Map overlay search input
-│   ├── FilterChipRow.tsx    # Horizontal filter strip
-│   ├── SportChip.tsx        # Sport + utility filter chips
-│   ├── WeatherBadge.tsx     # Compact outdoor condition pills
-│   ├── PopularityBadge.tsx  # Activity level indicator
-│   ├── DetailInfoRow.tsx    # Icon + label + value row for detail screens
-│   └── ChatPreviewCard.tsx  # Group chat entry point card
-│
-├── screens/             # One component per screen
-│   ├── HomeScreen.tsx       # Primary: full-screen map + bottom sheet
-│   ├── VenueDetailScreen.tsx
-│   ├── RunDetailScreen.tsx
-│   ├── ExploreScreen.tsx
-│   ├── SavedScreen.tsx
-│   └── ProfileScreen.tsx
-│
-├── navigation/          # Navigation config
-│   ├── AppNavigator.tsx     # Root stack + tab navigator
-│   └── types.ts             # Stack param type definitions
-│
-├── data/                # Types + mock data
-│   ├── types.ts             # All TypeScript interfaces
-│   ├── mockVenues.ts        # 8 realistic US venues
-│   ├── mockRuns.ts          # 7 recurring runs
-│   ├── mockConditions.ts    # Weather + popularity data
-│   ├── mockChats.ts         # Chat rooms + messages
-│   └── index.ts             # Re-exports
-│
-├── constants/           # Design tokens
-│   ├── colors.ts
-│   ├── typography.ts
-│   ├── spacing.ts
-│   └── sports.ts
-│
-└── utils/               # Pure helper functions
-    ├── weather.ts           # Badge configs, play condition display
-    └── formatting.ts        # Time, distance, schedule formatting
 ```
 
 ---
 
-## Future Roadmap
+## Roadmap
 
-| Priority | Feature |
-|---|---|
-| High | Supabase auth (email + Google) |
-| High | Real location-based venue fetching |
-| High | Real weather API integration (OpenWeatherMap or WeatherKit) |
-| High | Realtime group chat via Supabase Realtime |
-| Medium | QR share code for venues and runs |
-| Medium | Push notifications for nearby activity |
-| Medium | Venue/run submission flow (user-generated data) |
-| Medium | Map heatmap layer for activity density |
-| Low | Offline caching for saved venues |
-| Low | Web version via Expo for Web |
-| Later | College campus partnership integrations |
-| Later | YMCA / rec center schedule scraping pipeline |
+* Weather API integration
+* Realtime attendance
+* Push notifications
+* Run submission
+* Trust/freshness signals
+* AI-assisted schedule ingestion
 
 ---
 
 ## What This Is Not
 
-- Not a social network (no followers, friends, feed, stories)
-- Not an event ticketing app
-- Not a gamification / badge / points app
-- Not a fitness tracker
+* Not a social network
+* Not an event/ticketing platform
+* Not a fitness tracker
+* Not a private scheduling tool
