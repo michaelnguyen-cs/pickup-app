@@ -41,6 +41,10 @@ import {
 import { RootStackParamList } from '../navigation/types';
 import { useSavedContext } from '../context/SavedContext';
 import { useAuthContext } from '../context/AuthContext';
+import { fetchRunRecentReportCount } from '../lib/queries/reports';
+import { fetchRunAttendanceCount } from '../lib/queries/attendance';
+import { getTrustSignal } from '../utils/trustSignal';
+import { fetchWeather, WeatherResult } from '../lib/weather';
 
 type RouteType = RouteProp<RootStackParamList, 'RunDetail'>;
 
@@ -67,6 +71,30 @@ export function RunDetailScreen() {
     });
   }, [runId]);
 
+  // ── Recent report count for trust signal ──────────────────────────────────
+  const [recentReportCount, setRecentReportCount] = useState(0);
+
+  useEffect(() => {
+    fetchRunRecentReportCount(runId).then(setRecentReportCount);
+  }, [runId]);
+
+  // ── Weather — outdoor runs only ────────────────────────────────────────────
+  const [weather, setWeather] = useState<WeatherResult | null>(null);
+
+  useEffect(() => {
+    if (!run || run.isIndoor) return;
+    const { latitude, longitude } = run.venueCoordinates;
+    if (latitude === 0 && longitude === 0) return;
+    fetchWeather(latitude, longitude).then(setWeather);
+  }, [run?.isIndoor, run?.venueCoordinates.latitude, run?.venueCoordinates.longitude]);
+
+  // ── Attendance count (all users) ──────────────────────────────────────────
+  const [attendanceCount, setAttendanceCount] = useState(0);
+
+  useEffect(() => {
+    fetchRunAttendanceCount(runId).then(setAttendanceCount);
+  }, [runId]);
+
   // ── Attendance state ───────────────────────────────────────────────────────
   const [isGoing, setIsGoing] = useState(false);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
@@ -89,6 +117,31 @@ export function RunDetailScreen() {
       });
   }, [runId, user?.id]);
 
+  const handleReport = useCallback(() => {
+    if (!user) {
+      (navigation as any).navigate('SignIn');
+      return;
+    }
+    const submit = (reportType: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase.from('run_reports') as any).insert({
+        user_id: user.id,
+        run_id: runId,
+        report_type: reportType,
+      });
+    };
+    Alert.alert(
+      'Report an Issue',
+      'What problem did you find?',
+      [
+        { text: 'No one was there', onPress: () => submit('no_one_there') },
+        { text: 'Wrong time', onPress: () => submit('wrong_time') },
+        { text: 'Closed location', onPress: () => submit('closed_location') },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  }, [user, runId, navigation]);
+
   const handleAttendance = useCallback(async () => {
     if (!user) {
       // Redirect guests to sign in
@@ -97,7 +150,8 @@ export function RunDetailScreen() {
     }
 
     const nextGoing = !isGoing;
-    setIsGoing(nextGoing); // optimistic update
+    setIsGoing(nextGoing); // optimistic
+    setAttendanceCount((prev) => nextGoing ? prev + 1 : Math.max(0, prev - 1)); // optimistic
     setAttendanceLoading(true);
 
     try {
@@ -107,14 +161,20 @@ export function RunDetailScreen() {
         const { error } = await supabase
           .from('run_attendance')
           .upsert({ user_id: user.id, run_id: runId, status: 'attending' } as any);
-        if (error) setIsGoing(false); // rollback
+        if (error) {
+          setIsGoing(false); // rollback
+          setAttendanceCount((prev) => Math.max(0, prev - 1));
+        }
       } else {
         // Remove attendance
         const { error } = await supabase
           .from('run_attendance')
           .delete()
           .match({ user_id: user.id, run_id: runId });
-        if (error) setIsGoing(true); // rollback
+        if (error) {
+          setIsGoing(true); // rollback
+          setAttendanceCount((prev) => prev + 1);
+        }
       }
     } finally {
       setAttendanceLoading(false);
@@ -142,26 +202,32 @@ export function RunDetailScreen() {
 
   const sport = SPORT_MAP[run.sport];
   const saved = isRunSaved(runId);
+  const trustSignal = getTrustSignal(run, recentReportCount);
 
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* ── Header: back + bookmark ────────────────────────────────── */}
+        {/* ── Header: back | flag + bookmark ────────────────────────── */}
         <SafeAreaView style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={20} color={Colors.text.primary} />
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => toggleRunSaved(runId)}
-            style={styles.backBtn}
-            activeOpacity={0.85}
-          >
-            <Ionicons
-              name={saved ? 'bookmark' : 'bookmark-outline'}
-              size={20}
-              color={saved ? Colors.accent.orange : Colors.text.primary}
-            />
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            <TouchableOpacity onPress={handleReport} style={styles.backBtn} activeOpacity={0.85}>
+              <Ionicons name="flag-outline" size={20} color={Colors.text.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => toggleRunSaved(runId)}
+              style={styles.backBtn}
+              activeOpacity={0.85}
+            >
+              <Ionicons
+                name={saved ? 'bookmark' : 'bookmark-outline'}
+                size={20}
+                color={saved ? Colors.accent.orange : Colors.text.primary}
+              />
+            </TouchableOpacity>
+          </View>
         </SafeAreaView>
 
         <View style={styles.content}>
@@ -188,6 +254,32 @@ export function RunDetailScreen() {
           {/* Description */}
           <Text style={styles.description}>{run.description}</Text>
 
+          {/* Trust / freshness signal */}
+          {trustSignal && (
+            <View style={[styles.trustBadge, { backgroundColor: trustSignal.bg }]}>
+              <Ionicons name={trustSignal.icon as any} size={13} color={trustSignal.color} />
+              <Text style={[styles.trustText, { color: trustSignal.color }]}>
+                {trustSignal.label}
+              </Text>
+            </View>
+          )}
+
+          {/* Weather — outdoor runs only */}
+          {!run.isIndoor && weather && (
+            <View style={[styles.trustBadge, {
+              backgroundColor: weather.isRainy ? 'rgba(59,130,246,0.10)' : 'rgba(16,185,129,0.10)',
+            }]}>
+              <Ionicons
+                name={weather.isRainy ? 'rainy-outline' : 'sunny-outline'}
+                size={13}
+                color={weather.isRainy ? '#3B82F6' : '#059669'}
+              />
+              <Text style={[styles.trustText, { color: weather.isRainy ? '#3B82F6' : '#059669' }]}>
+                {weather.tempF}°F · {weather.isRainy ? 'Rain likely' : 'Clear'}
+              </Text>
+            </View>
+          )}
+
           {/* ── Info rows ─────────────────────────────────────────────── */}
           <View style={styles.infoCard}>
             <DetailInfoRow
@@ -195,10 +287,18 @@ export function RunDetailScreen() {
               label="Schedule"
               value={formatScheduleSummary(run.schedule)}
             />
+            {run.typicalTurnout != null && (
+              <DetailInfoRow
+                icon="people-outline"
+                label="Turnout"
+                value={`Usually ${run.typicalTurnout}${run.maxPlayers ? `/${run.maxPlayers}` : '+'} players`}
+              />
+            )}
             <DetailInfoRow
-              icon="people-outline"
-              label="Turnout"
-              value={`Usually ${run.typicalTurnout}${run.maxPlayers ? `/${run.maxPlayers}` : '+'} players`}
+              icon="people-circle-outline"
+              label="Attending"
+              value={attendanceCount === 0 ? 'Be the first!' : `${attendanceCount} going`}
+              valueColor={attendanceCount === 0 ? Colors.text.tertiary : '#16A34A'}
             />
             <DetailInfoRow
               icon="star-outline"
@@ -334,9 +434,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerRight: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+  },
   content: {
     padding: Spacing.base,
     gap: Spacing.base,
+  },
+  trustBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-start',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+  },
+  trustText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semibold,
   },
   heroSection: {
     flexDirection: 'row',

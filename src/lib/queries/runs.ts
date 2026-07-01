@@ -42,13 +42,16 @@ function mapRunRow(row: RunQueryRow): RecurringRun {
       },
     ],
     skillLevel: row.skill_level as SkillLevel,
-    typicalTurnout: 15,       // not in schema yet
+    typicalTurnout: null,     // not in schema yet
     costPerSession: 0,        // not in schema yet
     status: 'active',         // required by getVenueStatusBadge filter
-    popularityScore: 70,      // not in schema yet
+    popularityScore: null,    // not in schema yet
     tags: [],                 // not in schema yet
-    isVerified: true,         // not in schema yet
+    isVerified: false,        // not in schema yet
+    isIndoor: row.is_indoor,
     createdAt: row.created_at,
+    confidenceScore: row.confidence_score ?? null,
+    lastVerifiedAt: row.last_verified_at ?? null,
   };
 }
 

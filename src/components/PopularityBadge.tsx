@@ -8,7 +8,7 @@ import { FontSize, FontWeight } from '../constants/typography';
 import { Radius, Spacing } from '../constants/spacing';
 
 interface PopularityBadgeProps {
-  score: number;          // 0–100
+  score: number | null | undefined;  // 0–100
   showDot?: boolean;
   style?: object;
 }
@@ -21,6 +21,8 @@ function getPopularityColor(score: number): string {
 }
 
 export function PopularityBadge({ score, showDot = true, style }: PopularityBadgeProps) {
+  if (score == null) return null;
+
   const color = getPopularityColor(score);
   const label = formatPopularity(score);
 

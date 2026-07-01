@@ -14,28 +14,37 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, TabActions } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { SearchBar } from '../components/SearchBar';
 import { FilterChipRow } from '../components/FilterChipRow';
 import { VenueCard } from '../components/VenueCard';
 import { RecurringRunCard } from '../components/RecurringRunCard';
+import { DropInScheduleCard } from '../components/DropInScheduleCard';
 
 import { MOCK_CONDITIONS } from '../data/mockConditions';
 import { FilterChipId } from '../data/types';
+import { dropInSchedules } from '../data/dropInSchedules';
 import { Colors } from '../constants/colors';
 import { FontSize, FontWeight } from '../constants/typography';
 import { Radius, Spacing } from '../constants/spacing';
 import { getVenueStatusBadge, haversineDistance, mockDistance } from '../utils/formatting';
+import { rankSearch } from '../utils/search';
 import { useLocationContext } from '../context/LocationContext';
 import { useVenues } from '../hooks/useVenues';
 import { useRuns } from '../hooks/useRuns';
+import { useMapFocus } from '../context/MapFocusContext';
 import { RootStackParamList } from '../navigation/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type SortOption = 'distance' | 'popularity' | 'sport';
-type TabOption = 'venues' | 'runs';
+type TabOption = 'venues' | 'runs' | 'drop_in';
+
+// Drop-in sports that map to a filter chip sport (aliases for non-SportId slugs)
+const DROP_IN_SPORT_ALIAS: Record<string, string> = {
+  beach_volleyball: 'volleyball',
+};
 
 const SORT_OPTIONS: Array<{ id: SortOption; label: string }> = [
   { id: 'distance', label: 'Nearest' },
@@ -48,6 +57,7 @@ export function ExploreScreen() {
   const { coords } = useLocationContext();
   const { venues, isLoading: venuesLoading } = useVenues();
   const { runs, isLoading: runsLoading } = useRuns();
+  const { setPendingVenueId } = useMapFocus();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilters, setActiveFilters] = useState<FilterChipId[]>([]);
@@ -64,17 +74,6 @@ export function ExploreScreen() {
   const filteredVenues = useMemo(() => {
     let filtered = venues;
 
-    // Text search
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (v) =>
-          v.name.toLowerCase().includes(q) ||
-          v.city.toLowerCase().includes(q) ||
-          v.sports.some((s) => s.includes(q))
-      );
-    }
-
     // Filter chips
     if (activeFilters.includes('indoor')) filtered = filtered.filter((v) => v.indoorOutdoor !== 'outdoor');
     if (activeFilters.includes('outdoor')) filtered = filtered.filter((v) => v.indoorOutdoor !== 'indoor');
@@ -86,7 +85,12 @@ export function ExploreScreen() {
       filtered = filtered.filter((v) => sportFilters.some((s) => v.sports.includes(s as any)));
     }
 
-    // Sort — use real Haversine distance when available, fallback to mock
+    // Active search: rank by relevance (supersedes sortBy while a query is active)
+    if (searchQuery.trim()) {
+      return rankSearch(filtered, searchQuery, coords);
+    }
+
+    // No search: apply sortBy option
     return [...filtered].sort((a, b) => {
       if (sortBy === 'distance') {
         const da = coords ? haversineDistance(coords, a.coordinates) : mockDistance(a.id);
@@ -120,10 +124,33 @@ export function ExploreScreen() {
     if (activeFilters.includes('free'))
       filteredR = filteredR.filter((r) => !r.costPerSession);
     return [...filteredR].sort((a, b) => {
-      if (sortBy === 'popularity') return b.popularityScore - a.popularityScore;
+      if (sortBy === 'popularity') return (b.popularityScore ?? 0) - (a.popularityScore ?? 0);
       return mockDistance(a.venueId) - mockDistance(b.venueId);
     });
   }, [runs, searchQuery, activeFilters, sortBy]);
+
+  const filteredDropIn = useMemo(() => {
+    const sportFilters = activeFilters.filter((f) =>
+      ['basketball', 'volleyball', 'soccer', 'tennis', 'running', 'pickleball', 'badminton'].includes(f)
+    );
+    let list = dropInSchedules;
+    if (sportFilters.length > 0) {
+      list = list.filter((s) => {
+        const normalized = DROP_IN_SPORT_ALIAS[s.sport] ?? s.sport;
+        return sportFilters.includes(normalized as FilterChipId);
+      });
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(
+        (s) =>
+          s.title.toLowerCase().includes(q) ||
+          s.venue.toLowerCase().includes(q) ||
+          s.sport.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [activeFilters, searchQuery]);
 
   const renderHeader = () => (
     <View>
@@ -162,20 +189,24 @@ export function ExploreScreen() {
         </View>
       )}
 
-      {/* Tab toggle: Venues / Runs */}
+      {/* Tab toggle: Venues / Runs / Drop-In */}
       <View style={styles.tabRow}>
-        {(['venues', 'runs'] as TabOption[]).map((tab) => (
+        {([
+          { id: 'venues',  label: 'Venues',        count: filteredVenues.length },
+          { id: 'runs',    label: 'Recurring',      count: filteredRuns.length },
+          { id: 'drop_in', label: 'Drop-In',        count: filteredDropIn.length },
+        ] as Array<{ id: TabOption; label: string; count: number }>).map((tab) => (
           <TouchableOpacity
-            key={tab}
-            style={[styles.tabBtn, activeTab === tab && styles.tabBtnActive]}
-            onPress={() => setActiveTab(tab)}
+            key={tab.id}
+            style={[styles.tabBtn, activeTab === tab.id && styles.tabBtnActive]}
+            onPress={() => setActiveTab(tab.id)}
           >
-            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-              {tab === 'venues' ? 'Venues' : 'Recurring Runs'}
+            <Text style={[styles.tabText, activeTab === tab.id && styles.tabTextActive]}>
+              {tab.label}
             </Text>
-            <View style={[styles.tabCount, activeTab === tab && styles.tabCountActive]}>
-              <Text style={[styles.tabCountText, activeTab === tab && styles.tabCountTextActive]}>
-                {tab === 'venues' ? filteredVenues.length : filteredRuns.length}
+            <View style={[styles.tabCount, activeTab === tab.id && styles.tabCountActive]}>
+              <Text style={[styles.tabCountText, activeTab === tab.id && styles.tabCountTextActive]}>
+                {tab.count}
               </Text>
             </View>
           </TouchableOpacity>
@@ -231,12 +262,16 @@ export function ExploreScreen() {
                 statusBadge={statusBadge}
                 outdoorConditions={conditions}
                 onPress={() => navigation.navigate('VenueDetail', { venueId: item.id })}
+                onShowOnMap={() => {
+                  setPendingVenueId(item.id);
+                  navigation.dispatch(TabActions.jumpTo('Home'));
+                }}
                 variant="list"
               />
             );
           }}
         />
-      ) : (
+      ) : activeTab === 'runs' ? (
         <FlatList
           data={filteredRuns}
           keyExtractor={(item) => item.id}
@@ -264,6 +299,22 @@ export function ExploreScreen() {
               onPress={() => navigation.navigate('RunDetail', { runId: item.id })}
             />
           )}
+        />
+      ) : (
+        <FlatList
+          data={filteredDropIn}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          ListHeaderComponent={renderHeader}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={styles.emptyEmoji}>🔍</Text>
+              <Text style={styles.emptyTitle}>No drop-in sessions found</Text>
+              <Text style={styles.emptySubtitle}>Try clearing sport filters or search</Text>
+            </View>
+          }
+          renderItem={({ item }) => <DropInScheduleCard schedule={item} />}
         />
       )}
     </SafeAreaView>

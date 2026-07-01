@@ -95,13 +95,15 @@ export function RecurringRunCard({ run, onPress, variant = 'default' }: Recurrin
       </View>
 
       {/* Players */}
-      <View style={styles.infoRow}>
-        <Ionicons name="people-outline" size={13} color={Colors.text.tertiary} />
-        <Text style={styles.infoText}>
-          Usually {run.typicalTurnout}
-          {run.maxPlayers ? `/${run.maxPlayers}` : '+'} players
-        </Text>
-      </View>
+      {run.typicalTurnout != null && (
+        <View style={styles.infoRow}>
+          <Ionicons name="people-outline" size={13} color={Colors.text.tertiary} />
+          <Text style={styles.infoText}>
+            Usually {run.typicalTurnout}
+            {run.maxPlayers ? `/${run.maxPlayers}` : '+'} players
+          </Text>
+        </View>
+      )}
 
       {/* Footer pills */}
       <View style={styles.footer}>

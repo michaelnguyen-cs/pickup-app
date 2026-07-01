@@ -13,9 +13,40 @@ export interface Coordinates {
 
 // ─── Venue ────────────────────────────────────────────────────────────────────
 
-export type VenueType = 'park' | 'rec_center' | 'ymca' | 'sports_complex' | 'school' | 'private';
+export type VenueType =
+  // Dedicated single-sport courts/fields
+  | 'basketball_court'
+  | 'tennis_court'
+  | 'pickleball_court'
+  | 'soccer_field'
+  | 'football_field'
+  | 'athletic_field'      // multi-sport outdoor (track, grass)
+  // Dedicated multi-sport facilities
+  | 'gym'
+  | 'recreation_center'   // synonym for rec_center used by new data
+  | 'rec_center'
+  | 'ymca'
+  | 'sports_complex'
+  // Shared / semi-public spaces
+  | 'park_with_courts'    // public park that has named courts
+  | 'generic_park'        // open field, no dedicated courts
+  | 'park'                // legacy type — kept for existing data
+  | 'school_athletics'    // school gym / fields during open-access hours
+  | 'school'              // legacy type — kept for existing data
+  | 'community_center'
+  | 'stadium'             // large-venue, usually needs permission
+  // Blocked
+  | 'private_facility'
+  | 'private';            // legacy type — kept for existing data
 export type SurfaceType = 'hardwood' | 'concrete' | 'turf' | 'grass' | 'sand' | 'indoor_court';
 export type IndoorOutdoor = 'indoor' | 'outdoor' | 'both';
+
+// How reservations work at a venue. Omit the field entirely when unknown.
+export type ReservationPolicy =
+  | 'required'    // must book ahead every time
+  | 'peak_only'   // walk-in fine off-peak, book for evenings/weekends
+  | 'recommended' // walk-in usually works but booking reduces wait
+  | 'first_come'; // always walk-in, no reservations taken
 
 export interface Venue {
   id: string;
@@ -39,6 +70,11 @@ export interface Venue {
   isSaved?: boolean;
   tags: string[];                 // e.g. ['popular', 'well-lit', 'competitive']
   createdAt: string;
+  // ── Reservation awareness (Phase 5) ──────────────────────────────────────
+  // All optional — omit entirely when no reservation data is known.
+  reservationPolicy?: ReservationPolicy;
+  reservationUrl?: string;        // official booking page; opens in browser
+  busyHoursNote?: string;         // e.g. "Courts fill after 5pm on weekdays"
 }
 
 // ─── Schedule ─────────────────────────────────────────────────────────────────
@@ -69,15 +105,19 @@ export interface RecurringRun {
   description: string;
   schedule: TimeSlot[];           // which days/times this recurs
   skillLevel: SkillLevel;
-  typicalTurnout: number;         // expected # of players
+  typicalTurnout?: number | null; // expected # of players — null when not yet tracked
   maxPlayers?: number;
   costPerSession?: number;        // 0 = free
   organizer?: string;             // name of known host (optional)
   status: RunStatus;
-  popularityScore: number;        // 0–100
+  popularityScore?: number | null; // 0–100 — null when not yet tracked
   tags: string[];
-  isVerified: boolean;            // verified recurring run vs user-reported
+  isVerified?: boolean;           // verified recurring run vs user-reported — undefined = unknown
+  isIndoor: boolean;
   createdAt: string;
+  // Phase 8 trust / freshness fields (null for admin-entered runs pre-Phase 7)
+  confidenceScore?: number | null;
+  lastVerifiedAt?: string | null;
 }
 
 // ─── One-Time Event ───────────────────────────────────────────────────────────
