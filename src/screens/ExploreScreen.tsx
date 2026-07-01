@@ -29,7 +29,7 @@ import { dropInSchedules } from '../data/dropInSchedules';
 import { Colors } from '../constants/colors';
 import { FontSize, FontWeight } from '../constants/typography';
 import { Radius, Spacing } from '../constants/spacing';
-import { getVenueStatusBadge, haversineDistance, mockDistance } from '../utils/formatting';
+import { getVenueStatusBadge, haversineDistance } from '../utils/formatting';
 import { rankSearch } from '../utils/search';
 import { useLocationContext } from '../context/LocationContext';
 import { useVenues } from '../hooks/useVenues';
@@ -93,8 +93,9 @@ export function ExploreScreen() {
     // No search: apply sortBy option
     return [...filtered].sort((a, b) => {
       if (sortBy === 'distance') {
-        const da = coords ? haversineDistance(coords, a.coordinates) : mockDistance(a.id);
-        const db = coords ? haversineDistance(coords, b.coordinates) : mockDistance(b.id);
+        if (!coords) return b.popularityScore - a.popularityScore; // no location — most popular first
+        const da = haversineDistance(coords, a.coordinates);
+        const db = haversineDistance(coords, b.coordinates);
         return da - db;
       }
       if (sortBy === 'popularity') return b.popularityScore - a.popularityScore;
@@ -125,9 +126,10 @@ export function ExploreScreen() {
       filteredR = filteredR.filter((r) => !r.costPerSession);
     return [...filteredR].sort((a, b) => {
       if (sortBy === 'popularity') return (b.popularityScore ?? 0) - (a.popularityScore ?? 0);
-      return mockDistance(a.venueId) - mockDistance(b.venueId);
+      if (!coords) return 0; // no location — leave order as-is
+      return haversineDistance(coords, a.venueCoordinates) - haversineDistance(coords, b.venueCoordinates);
     });
-  }, [runs, searchQuery, activeFilters, sortBy]);
+  }, [runs, searchQuery, activeFilters, sortBy, coords]);
 
   const filteredDropIn = useMemo(() => {
     const sportFilters = activeFilters.filter((f) =>
