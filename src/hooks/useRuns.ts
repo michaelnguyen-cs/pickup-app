@@ -25,6 +25,7 @@ export function useRuns(): UseRunsResult {
       setRuns(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load runs');
+      setRuns([]);
     } finally {
       setIsLoading(false);
     }

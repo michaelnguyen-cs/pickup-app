@@ -25,6 +25,7 @@ export function useVenues(): UseVenuesResult {
       setVenues(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load venues');
+      setVenues([]);
     } finally {
       setIsLoading(false);
     }
