@@ -161,22 +161,6 @@ export function haversineDistance(
   return R * 2 * Math.asin(Math.sqrt(h));
 }
 
-// Fallback mock distances — used when location permission is denied or not yet resolved.
-// Keyed by venue ID to stay consistent with mock data.
-export function mockDistance(venueId: string): number {
-  const distances: Record<string, number> = {
-    v1: 0.3,
-    v2: 1.2,
-    v3: 0.8,
-    v4: 2.1,
-    v5: 0.5,
-    v6: 1.6,
-    v7: 3.4,
-    v8: 4.7,
-  };
-  return distances[venueId] ?? 2.0;
-}
-
 // ─── Venue status badge ───────────────────────────────────────────────────────
 // Derives live status from recurring run schedules relative to current time.
 // Returns a display-ready badge: "Open Now" (green), "Tonight 7pm" (amber), or
