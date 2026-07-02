@@ -23,7 +23,9 @@ import { Colors } from '../constants/colors';
 import { FontSize, FontWeight } from '../constants/typography';
 import { Radius, Spacing } from '../constants/spacing';
 import { SkillLevel } from '../data/types';
+import { SportId } from '../constants/sports';
 import { useAuthContext } from '../context/AuthContext';
+import { usePrefsContext } from '../context/PrefsContext';
 import { RootStackParamList } from '../navigation/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -40,9 +42,8 @@ const RADIUS_OPTIONS = [1, 3, 5, 10, 25];
 export function ProfileScreen() {
   const navigation = useNavigation<Nav>();
   const { user, profile, signOut } = useAuthContext();
+  const { prefs, completeOnboarding } = usePrefsContext();
 
-  const [selectedSports, setSelectedSports] = useState<string[]>(['basketball', 'volleyball']);
-  const [skillLevel, setSkillLevel] = useState<SkillLevel>('casual');
   const [radiusMiles, setRadiusMiles] = useState(5);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
@@ -53,10 +54,11 @@ export function ProfileScreen() {
     ]);
   };
 
-  const toggleSport = (sportId: string) => {
-    setSelectedSports((prev) =>
-      prev.includes(sportId) ? prev.filter((s) => s !== sportId) : [...prev, sportId]
-    );
+  const toggleSport = (sportId: SportId) => {
+    const next = prefs.sports.includes(sportId)
+      ? prefs.sports.filter((s) => s !== sportId)
+      : [...prefs.sports, sportId];
+    completeOnboarding({ ...prefs, sports: next });
   };
 
   return (
@@ -64,7 +66,16 @@ export function ProfileScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Preferences</Text>
+          <View style={styles.headerTop}>
+            <Text style={styles.headerTitle}>Preferences</Text>
+            <TouchableOpacity
+              style={styles.settingsBtn}
+              onPress={() => navigation.navigate('Settings')}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="settings-outline" size={22} color={Colors.text.secondary} />
+            </TouchableOpacity>
+          </View>
           <Text style={styles.headerSubtitle}>
             We use these to personalize what you see nearby.
           </Text>
@@ -121,7 +132,7 @@ export function ProfileScreen() {
               <SportChip
                 key={sport.id}
                 sport={sport}
-                isActive={selectedSports.includes(sport.id)}
+                isActive={prefs.sports.includes(sport.id)}
                 onPress={() => toggleSport(sport.id)}
               />
             ))}
@@ -138,18 +149,18 @@ export function ProfileScreen() {
                 key={level.id}
                 style={[
                   styles.skillCard,
-                  skillLevel === level.id && styles.skillCardActive,
+                  prefs.skillLevel === level.id && styles.skillCardActive,
                 ]}
-                onPress={() => setSkillLevel(level.id)}
+                onPress={() => completeOnboarding({ ...prefs, skillLevel: level.id })}
                 activeOpacity={0.85}
               >
-                <Text style={[styles.skillLabel, skillLevel === level.id && styles.skillLabelActive]}>
+                <Text style={[styles.skillLabel, prefs.skillLevel === level.id && styles.skillLabelActive]}>
                   {level.label}
                 </Text>
-                <Text style={[styles.skillDesc, skillLevel === level.id && styles.skillDescActive]}>
+                <Text style={[styles.skillDesc, prefs.skillLevel === level.id && styles.skillDescActive]}>
                   {level.description}
                 </Text>
-                {skillLevel === level.id && (
+                {prefs.skillLevel === level.id && (
                   <View style={styles.skillCheck}>
                     <Ionicons name="checkmark-circle" size={16} color={Colors.accent.orange} />
                   </View>
@@ -163,6 +174,7 @@ export function ProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Search Radius</Text>
           <Text style={styles.sectionSubtitle}>How far to look for venues and runs</Text>
+          <Text style={styles.deviceOnlyNote}>Saved on this device only</Text>
           <View style={styles.radiusRow}>
             {RADIUS_OPTIONS.map((r) => (
               <TouchableOpacity
@@ -181,6 +193,7 @@ export function ProfileScreen() {
         {/* ── Notifications ─────────────────────────────────────────── */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Notifications</Text>
+          <Text style={styles.deviceOnlyNote}>Saved on this device only</Text>
           <View style={styles.settingRow}>
             <View style={styles.settingText}>
               <Text style={styles.settingLabel}>Nearby activity alerts</Text>
@@ -224,6 +237,17 @@ export function ProfileScreen() {
               <Text style={styles.signOutText}>Sign Out</Text>
             </TouchableOpacity>
           )}
+          {user?.email === process.env.EXPO_PUBLIC_ADMIN_EMAIL && (
+            <TouchableOpacity
+              style={styles.appRow}
+              onPress={() => navigation.navigate('AdminCandidateReview')}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="shield-outline" size={18} color={Colors.text.secondary} />
+              <Text style={styles.appRowText}>Candidate Review</Text>
+              <Ionicons name="chevron-forward" size={16} color={Colors.text.tertiary} />
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={{ height: Spacing.xxxl }} />
@@ -244,6 +268,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bg.sheet,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border.light,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  settingsBtn: {
+    padding: Spacing.xs,
   },
   headerTitle: {
     fontSize: FontSize.xxl,
@@ -270,6 +302,11 @@ const styles = StyleSheet.create({
   sectionSubtitle: {
     fontSize: FontSize.sm,
     color: Colors.text.secondary,
+    marginTop: -Spacing.xs,
+  },
+  deviceOnlyNote: {
+    fontSize: FontSize.xs,
+    color: Colors.text.tertiary,
     marginTop: -Spacing.xs,
   },
   sportGrid: {
