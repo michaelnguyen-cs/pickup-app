@@ -26,6 +26,7 @@ import { DropInScheduleCard } from '../components/DropInScheduleCard';
 import { MOCK_CONDITIONS } from '../data/mockConditions';
 import { FilterChipId } from '../data/types';
 import { dropInSchedules } from '../data/dropInSchedules';
+import { FILTER_SPORTS, SportId } from '../constants/sports';
 import { Colors } from '../constants/colors';
 import { FontSize, FontWeight } from '../constants/typography';
 import { Radius, Spacing } from '../constants/spacing';
@@ -78,9 +79,7 @@ export function ExploreScreen() {
     if (activeFilters.includes('indoor')) filtered = filtered.filter((v) => v.indoorOutdoor !== 'outdoor');
     if (activeFilters.includes('outdoor')) filtered = filtered.filter((v) => v.indoorOutdoor !== 'indoor');
     if (activeFilters.includes('popular_now')) filtered = filtered.filter((v) => v.popularityScore >= 75);
-    const sportFilters = activeFilters.filter((f) =>
-      ['basketball', 'volleyball', 'soccer', 'tennis', 'running', 'pickleball'].includes(f)
-    );
+    const sportFilters = activeFilters.filter((f) => FILTER_SPORTS.includes(f as SportId));
     if (sportFilters.length > 0) {
       filtered = filtered.filter((v) => sportFilters.some((s) => v.sports.includes(s as any)));
     }
@@ -112,9 +111,7 @@ export function ExploreScreen() {
         (r) => r.name.toLowerCase().includes(q) || r.venueName.toLowerCase().includes(q)
       );
     }
-    const sportFilters = activeFilters.filter((f) =>
-      ['basketball', 'volleyball', 'soccer', 'tennis', 'running', 'pickleball'].includes(f)
-    );
+    const sportFilters = activeFilters.filter((f) => FILTER_SPORTS.includes(f as SportId));
     if (sportFilters.length > 0) {
       filteredR = filteredR.filter((r) => sportFilters.includes(r.sport as FilterChipId));
     }
@@ -132,9 +129,7 @@ export function ExploreScreen() {
   }, [runs, searchQuery, activeFilters, sortBy, coords]);
 
   const filteredDropIn = useMemo(() => {
-    const sportFilters = activeFilters.filter((f) =>
-      ['basketball', 'volleyball', 'soccer', 'tennis', 'running', 'pickleball', 'badminton'].includes(f)
-    );
+    const sportFilters = activeFilters.filter((f) => FILTER_SPORTS.includes(f as SportId));
     let list = dropInSchedules;
     if (sportFilters.length > 0) {
       list = list.filter((s) => {

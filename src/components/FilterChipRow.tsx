@@ -5,7 +5,7 @@
 import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { FilterChip, SportChip } from './SportChip';
-import { SPORTS, HOME_FILTER_SPORTS, Sport } from '../constants/sports';
+import { SPORTS, FILTER_SPORTS, Sport } from '../constants/sports';
 import { FilterChipId } from '../data/types';
 import { Spacing } from '../constants/spacing';
 
@@ -30,7 +30,7 @@ export function FilterChipRow({
   onToggle,
   showSports = true,
 }: FilterChipRowProps) {
-  const visibleSports = SPORTS.filter((s) => HOME_FILTER_SPORTS.includes(s.id));
+  const visibleSports = SPORTS.filter((s) => FILTER_SPORTS.includes(s.id));
 
   return (
     <ScrollView

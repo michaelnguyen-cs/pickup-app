@@ -4,7 +4,6 @@
 // every component and utility that already works with Venue keeps working.
 //
 // Known schema gaps (resolved when DB schema expands):
-//   - sports: DB has single sport_id; mapped to a one-element array
 //   - indoorOutdoor: DB has boolean is_indoor; 'both' can't be expressed yet
 //   - amenities / tags / phone / website: not in schema yet, defaulted to []
 
@@ -19,7 +18,9 @@ function mapVenueRow(row: VenueRow): Venue {
     name: row.name,
     shortName: row.name.split(' ').slice(0, 2).join(' '),
     venueType: 'rec_center',            // DB schema doesn't have this yet
-    sports: [row.sport_id as SportId],  // single sport until schema supports array
+    // sports[] is the source of truth; sport_id is a fallback for rows where
+    // sports[] hasn't been backfilled (null or empty).
+    sports: (row.sports && row.sports.length > 0 ? row.sports : [row.sport_id]) as SportId[],
     address: row.address,
     city: row.city,
     coordinates: {

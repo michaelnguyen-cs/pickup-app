@@ -50,6 +50,7 @@ import { geocodeAddress } from '../utils/geocode';
 import { useVenues } from '../hooks/useVenues';
 import { useRuns } from '../hooks/useRuns';
 import { FilterChipId } from '../data/types';
+import { FILTER_SPORTS, SportId } from '../constants/sports';
 import { Colors } from '../constants/colors';
 import { FontSize, FontWeight } from '../constants/typography';
 import { Radius, Shadow, Spacing } from '../constants/spacing';
@@ -383,9 +384,7 @@ export function HomeScreen() {
       if (activeFilters.includes('outdoor') && v.indoorOutdoor === 'indoor') return false;
       if (activeFilters.includes('popular_now') && v.popularityScore < 75) return false;
       if (activeFilters.includes('open_now') && statusBadges[v.id]?.label !== 'Open Now') return false;
-      const sportFilters = activeFilters.filter((f) =>
-        ['basketball', 'volleyball', 'soccer', 'tennis', 'running', 'pickleball'].includes(f)
-      );
+      const sportFilters = activeFilters.filter((f) => FILTER_SPORTS.includes(f as SportId));
       if (sportFilters.length > 0 && !sportFilters.some((s) => v.sports.includes(s as any)))
         return false;
       return true;

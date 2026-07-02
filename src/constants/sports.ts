@@ -32,12 +32,15 @@ export const SPORTS: Sport[] = [
 
 export const SPORT_MAP = Object.fromEntries(SPORTS.map((s) => [s.id, s])) as Record<SportId, Sport>;
 
-// Quick-access filter chips shown on home screen (subset)
-export const HOME_FILTER_SPORTS: SportId[] = [
+// Single source of truth for which sports appear as filter chips (venue/run
+// filtering on Home and Explore, plus the Explore drop-in tab). Add a sport
+// here and every filter chip picks it up — nowhere else to update.
+export const FILTER_SPORTS: SportId[] = [
   'basketball',
   'volleyball',
   'soccer',
   'tennis',
-  'running',
   'pickleball',
+  'badminton',
+  'running',
 ];
