@@ -25,7 +25,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Venue, OutdoorConditions } from '../data/types';
-import { StatusBadge, formatDistance, mockDistance, haversineDistance } from '../utils/formatting';
+import { StatusBadge, formatDistance, haversineDistance } from '../utils/formatting';
 import { Colors } from '../constants/colors';
 import { FontSize, FontWeight } from '../constants/typography';
 import { Radius, Shadow, Spacing } from '../constants/spacing';
@@ -41,6 +41,7 @@ interface VenueCardProps {
   statusBadge?: StatusBadge | null;  // derived from recurring runs in parent
   onPress?: () => void;
   onSave?: () => void;
+  onShowOnMap?: () => void;           // list variant only — switches to Map tab focused on venue
   variant?: 'sheet' | 'list';
 }
 
@@ -94,16 +95,15 @@ export function VenueCard({
   statusBadge,
   onPress,
   onSave,
+  onShowOnMap,
   variant = 'list',
 }: VenueCardProps) {
   const { coords } = useLocationContext();
   const { isSaved, toggleSaved } = useSavedContext();
   const primarySport = venue.sports[0];
   const sport = SPORT_MAP[primarySport];
-  // Use real Haversine distance when location is available; fall back to mock
-  const distance = coords
-    ? haversineDistance(coords, venue.coordinates)
-    : mockDistance(venue.id);
+  // Use real Haversine distance when location is available; otherwise show '—'
+  const distance = coords ? haversineDistance(coords, venue.coordinates) : null;
   const isOutdoor = venue.indoorOutdoor === 'outdoor' || venue.indoorOutdoor === 'both';
 
   // ── Sheet variant ─────────────────────────────────────────────────────────
@@ -240,19 +240,31 @@ export function VenueCard({
           {venue.address}, {venue.city}
         </Text>
 
-        {/* Footer: status + popularity + weather */}
+        {/* Footer: status + popularity + weather + optional map shortcut */}
         <View style={styles.listFooter}>
-          {statusBadge && (
-            <View style={[styles.statusBadge, { backgroundColor: statusBadge.bg }]}>
-              <View style={[styles.statusDot, { backgroundColor: statusBadge.color }]} />
-              <Text style={[styles.statusLabel, { color: statusBadge.color }]}>
-                {statusBadge.label}
-              </Text>
-            </View>
-          )}
-          <PopularityBadge score={venue.popularityScore} />
-          {isOutdoor && outdoorConditions && (
-            <WeatherBadge conditions={outdoorConditions} variant="compact" />
+          <View style={styles.listFooterBadges}>
+            {statusBadge && (
+              <View style={[styles.statusBadge, { backgroundColor: statusBadge.bg }]}>
+                <View style={[styles.statusDot, { backgroundColor: statusBadge.color }]} />
+                <Text style={[styles.statusLabel, { color: statusBadge.color }]}>
+                  {statusBadge.label}
+                </Text>
+              </View>
+            )}
+            <PopularityBadge score={venue.popularityScore} />
+            {isOutdoor && outdoorConditions && (
+              <WeatherBadge conditions={outdoorConditions} variant="compact" />
+            )}
+          </View>
+          {onShowOnMap && (
+            <TouchableOpacity
+              style={styles.mapPill}
+              onPress={onShowOnMap}
+              activeOpacity={0.82}
+            >
+              <Ionicons name="map-outline" size={11} color={Colors.accent.orange} />
+              <Text style={styles.mapPillText}>Map</Text>
+            </TouchableOpacity>
           )}
         </View>
       </View>
@@ -467,8 +479,31 @@ const styles = StyleSheet.create({
   listFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    justifyContent: 'space-between',
     marginTop: 2,
+    gap: Spacing.sm,
+  },
+  listFooterBadges: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
     flexWrap: 'wrap',
+    flex: 1,
+  },
+  mapPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.accent.orange,
+    flexShrink: 0,
+  },
+  mapPillText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semibold,
+    color: Colors.accent.orange,
   },
 });

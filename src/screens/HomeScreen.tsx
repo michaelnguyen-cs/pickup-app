@@ -1,65 +1,79 @@
 // HomeScreen — full-screen map + bottom sheet discovery surface
 //
-// Phase 2 changes:
-//   1. Snap points now pixel-based so peek shows exactly ~1.5 cards
-//   2. Map pin tap → shows MapPreviewCard floating above bottom sheet
-//      (replaces the old "just snap sheet to index 1" behavior)
-//   3. Sheet header simplified — subtitle updates to show selected venue context
-//   4. statusBadge computed from live run schedule and passed to every VenueCard
-//   5. Map background tap dismisses selected pin + preview card
-//   6. Locate button repositioned to not conflict with preview card
+// Layout (top→bottom render order):
+//   1. Full-screen MapView (base layer)
+//   2. Locate button (floating, absolute, right side above sheet)
+//      ↳ raises when venue preview card is visible
+//   3. Top overlay: SafeAreaView › SearchBar + FilterChipRow
+//   4. MapPreviewCard (absolute, above sheet — slides in on pin tap)
+//   5. BottomSheet
+//       ├── handle indicator
+//       ├── sheetHeader: "Nearby" + count + Venues/Runs toggle
+//       └── BottomSheetScrollView: venue cards or run cards
+//
+// Selected venue flow:
+//   Tap pin → setSelectedVenueId → map animates to venue → MapPreviewCard slides up
+//   Expand sheet (index > 0) → clears selection + card animates out
+//   Dismiss via × button or map background tap → clears selection
 
 import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   ActivityIndicator,
+  Animated,
   Platform,
-  Dimensions,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
+import { useMapFocus } from '../context/MapFocusContext';
 import { SearchBar } from '../components/SearchBar';
 import { FilterChipRow } from '../components/FilterChipRow';
 import { VenueCard } from '../components/VenueCard';
 import { RecurringRunCard } from '../components/RecurringRunCard';
 import { MapPin } from '../components/MapPin';
 import { MapPreviewCard } from '../components/MapPreviewCard';
+import { DropInPin } from '../components/DropInPin';
+import { DropInPreviewCard } from '../components/DropInPreviewCard';
 
 import { MOCK_CONDITIONS } from '../data/mockConditions';
+import { dropInSchedules, DropInVenuePin } from '../data/dropInSchedules';
+import { geocodeAddress } from '../utils/geocode';
 import { useVenues } from '../hooks/useVenues';
 import { useRuns } from '../hooks/useRuns';
 import { FilterChipId } from '../data/types';
 import { Colors } from '../constants/colors';
 import { FontSize, FontWeight } from '../constants/typography';
 import { Radius, Shadow, Spacing } from '../constants/spacing';
-import { getVenueStatusBadge, haversineDistance } from '../utils/formatting';
+import {
+  getVenueStatusBadge,
+  haversineDistance,
+} from '../utils/formatting';
+import { rankSearch } from '../utils/search';
 import { useLocationContext } from '../context/LocationContext';
 import { RootStackParamList } from '../navigation/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+// ── Sheet geometry ────────────────────────────────────────────────────────────
+const SHEET_CARD_H   = 112;
+const SHEET_HEADER_H = 54;
+const HANDLE_H       = 24;
+const PEEK_HEIGHT    = Math.round(HANDLE_H + SHEET_HEADER_H + SHEET_CARD_H * 1.6); // ≈ 257
 
-// ── Snap point calculation ────────────────────────────────────────────────────
-// Card height: 96px image + 2*8px padding = 112px total incl. margin
-// Sheet header: ~74px (title row + tab toggle + hairline)
-// Peek = header + 1 full card + 0.55 of a second card → feels like a list
-const SHEET_CARD_H = 112;
-const SHEET_HEADER_H = 74;
-const PEEK_HEIGHT = Math.round(SHEET_HEADER_H + SHEET_CARD_H * 1.55); // ≈ 247
-
-// Estimated tab bar height (accounts for safe-area padding on iOS)
+// Safe-area-inclusive tab bar height
 const TAB_BAR_H = Platform.OS === 'ios' ? 86 : 62;
 
-// Dark map style — teal/navy from design references
+// ── Map style ─────────────────────────────────────────────────────────────────
+// Dark teal/navy theme. POIs suppressed except parks (sports-relevant).
 const MAP_STYLE = [
   { elementType: 'geometry', stylers: [{ color: '#1a2744' }] },
   { elementType: 'labels.text.fill', stylers: [{ color: '#8ec3b9' }] },
@@ -67,10 +81,12 @@ const MAP_STYLE = [
   { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#334155' }] },
   { featureType: 'administrative.land_parcel', elementType: 'labels.text.fill', stylers: [{ color: '#64748b' }] },
   { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#0f2137' }] },
-  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#1e3a5f' }] },
-  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#6d9886' }] },
-  { featureType: 'poi.park', elementType: 'geometry.fill', stylers: [{ color: '#1a4731' }] },
+  { featureType: 'poi', elementType: 'all', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.park', elementType: 'geometry.fill', stylers: [{ visibility: 'on' }, { color: '#1a4731' }] },
+  { featureType: 'poi.park', elementType: 'labels.text', stylers: [{ visibility: 'on' }] },
   { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#3e8e6b' }] },
+  { featureType: 'poi.park', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit.station', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
   { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#253c6e' }] },
   { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#1a2744' }] },
   { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9ca3af' }] },
@@ -81,50 +97,154 @@ const MAP_STYLE = [
   { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4895a0' }] },
 ];
 
-// Fallback region shown before location resolves (or if permission denied)
-// Centered on continental US so the map isn't blank on first load
+// Continental US overview shown before location resolves.
 const FALLBACK_REGION = {
-  latitude: 39.5,
-  longitude: -98.35,
-  latitudeDelta: 60,
-  longitudeDelta: 60,
+  latitude: 37.5,
+  longitude: -96.0,
+  latitudeDelta: 28,
+  longitudeDelta: 62,
 };
+
+const INTRO_PAUSE_MS = 500;
+
+// Tight neighborhood zoom (~1.8 km) for venue focus animation.
+const VENUE_FOCUS_DELTA = 0.018;
+
+// How far the user must pan from the selected venue (in miles) to trigger dismissal.
+// At neighborhood zoom (~1.25 mi visible), this is roughly 1/8 of the viewport width —
+// clearly intentional but not sensitive enough to fire on micro-adjustments.
+const DISMISS_THRESHOLD_MILES = 0.15;
+
+// How long after venue selection to ignore pan-dismiss (covers the fly-to animation).
+const DISMISS_GUARD_MS = 700;
 
 export function HomeScreen() {
   const navigation = useNavigation<Nav>();
   const mapRef = useRef<MapView>(null);
   const bottomSheetRef = useRef<BottomSheet>(null);
-  const hasCenteredMap = useRef(false); // animate to user location only once on first fix
+  const hasCenteredMap = useRef(false);
+  const mountedAt = useRef(Date.now());
 
-  const { coords, isLocating } = useLocationContext();
-  const { venues, isLoading: venuesLoading } = useVenues();
-  const { runs } = useRuns();
+  // Pan-dismiss microinteraction refs — all mutable, no state, no rerenders per frame.
+  const tensionAnim = useRef(new Animated.Value(0)).current;
+  const hasTriggeredDismiss = useRef(false);
+  const dismissGuardActive = useRef(false);
+  const dismissGuardTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Tracks the selected venue without a stale-closure problem inside onRegionChange.
+  const selectedVenueRef = useRef<{ coordinates: { latitude: number; longitude: number } } | null>(null);
+  // Android: PROVIDER_GOOGLE propagates Marker.onPress to MapView.onPress in the
+  // same event batch. This lock prevents the MapView tap from immediately clearing
+  // the selection that handleMarkerPress just made.
+  const markerTapLock = useRef(false);
+
+  const { coords } = useLocationContext();
+  const { venues, isLoading: venuesLoading, error: venuesError, refetch: refetchVenues } = useVenues();
+  const { runs, error: runsError, refetch: refetchRuns } = useRuns();
+  const { pendingVenueId, setPendingVenueId } = useMapFocus();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilters, setActiveFilters] = useState<FilterChipId[]>([]);
   const [selectedVenueId, setSelectedVenueId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'venues' | 'runs'>('venues');
-  // Track sheet index so we can hide preview card when sheet is expanded
   const [sheetIndex, setSheetIndex] = useState(0);
+  const [dropInPins, setDropInPins] = useState<DropInVenuePin[]>([]);
+  const [selectedDropInKey, setSelectedDropInKey] = useState<string | null>(null);
 
-  // Pixel-based snap points: precise peek, comfortable half, near-full
   const snapPoints = useMemo(() => [PEEK_HEIGHT, '58%', '92%'], []);
 
-  // Animate map to user's location on first GPS fix (only once per session)
+  // ── Effects ───────────────────────────────────────────────────────────────
+
+  // Two-phase fly-in to user location on first GPS fix.
   useEffect(() => {
-    if (coords && !hasCenteredMap.current) {
-      hasCenteredMap.current = true;
+    if (!coords || hasCenteredMap.current) return;
+    hasCenteredMap.current = true;
+
+    const elapsed = Date.now() - mountedAt.current;
+    const delay = Math.max(0, INTRO_PAUSE_MS - elapsed);
+    let t2: ReturnType<typeof setTimeout>;
+
+    const t1 = setTimeout(() => {
+      mapRef.current?.animateToRegion(
+        { latitude: coords.latitude, longitude: coords.longitude, latitudeDelta: 2, longitudeDelta: 2 },
+        1000,
+      );
+      t2 = setTimeout(() => {
+        mapRef.current?.animateToRegion(
+          { latitude: coords.latitude, longitude: coords.longitude, latitudeDelta: 0.06, longitudeDelta: 0.06 },
+          700,
+        );
+      }, 1050);
+    }, delay);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [coords]);
+
+  // Explore → Home handoff: focus a venue passed via MapFocusContext.
+  useEffect(() => {
+    if (!pendingVenueId) return;
+    const venue = venues.find((v) => v.id === pendingVenueId);
+    setSelectedVenueId(pendingVenueId);
+    setPendingVenueId(null);
+    if (!venue) return;
+    const t = setTimeout(() => {
       mapRef.current?.animateToRegion(
         {
+          latitude: venue.coordinates.latitude,
+          longitude: venue.coordinates.longitude,
+          latitudeDelta: VENUE_FOCUS_DELTA,
+          longitudeDelta: VENUE_FOCUS_DELTA,
+        },
+        600,
+      );
+    }, 320);
+    return () => clearTimeout(t);
+  }, [pendingVenueId, venues, setPendingVenueId]);
+
+  // Geocode unique drop-in venue addresses once on mount.
+  // Builds DropInVenuePin entries for map rendering.
+  useEffect(() => {
+    const seen = new Set<string>();
+    const toGeocode: Array<{ key: string; name: string; address: string }> = [];
+
+    for (const s of dropInSchedules) {
+      if (!s.address) continue;
+      // Skip if coordinates are already embedded in the seed data
+      if (s.latitude != null && s.longitude != null) continue;
+      if (seen.has(s.venue)) continue;
+      seen.add(s.venue);
+      toGeocode.push({ key: s.venue, name: s.venue, address: s.address });
+    }
+
+    if (toGeocode.length === 0) return;
+
+    let cancelled = false;
+
+    Promise.all(
+      toGeocode.map(async ({ key, name, address }) => {
+        const coords = await geocodeAddress(address);
+        if (!coords) return null;
+        const pin: DropInVenuePin = {
+          key,
+          name,
+          address,
           latitude: coords.latitude,
           longitude: coords.longitude,
-          latitudeDelta: 0.06, // ~4 mile radius — good for city-level discovery
-          longitudeDelta: 0.06,
-        },
-        800 // ms animation duration
-      );
-    }
-  }, [coords]);
+          schedules: dropInSchedules.filter((s) => s.venue === name),
+        };
+        return pin;
+      }),
+    ).then((results) => {
+      if (cancelled) return;
+      setDropInPins(results.filter((r): r is DropInVenuePin => r !== null));
+    });
+
+    return () => { cancelled = true; };
+  }, []);
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
   const toggleFilter = useCallback((id: FilterChipId) => {
     setActiveFilters((prev) =>
@@ -132,18 +252,112 @@ export function HomeScreen() {
     );
   }, []);
 
-  // Tapping a pin: select venue + show preview card (don't auto-expand sheet)
+  // Tap a map pin: select venue + snap sheet to peek + animate map.
   const handleMarkerPress = useCallback((venueId: string) => {
+    // Block MapView.onPress from firing dismissSelection on this same tap.
+    // On Android with PROVIDER_GOOGLE, a Marker tap propagates to MapView.onPress
+    // in the same JS event batch. Without this lock, dismissSelection() fires
+    // immediately after setSelectedVenueId(), clearing the selection before React
+    // even re-renders — so the preview card never appears.
+    markerTapLock.current = true;
+    requestAnimationFrame(() => { markerTapLock.current = false; });
+
+    // Reset pan-dismiss guards synchronously BEFORE animateToRegion so that
+    // onRegionChange can't fire a dismiss during the fly-to animation.
+    hasTriggeredDismiss.current = false;
+    tensionAnim.setValue(0);
+    dismissGuardActive.current = true;
+    if (dismissGuardTimer.current !== undefined) clearTimeout(dismissGuardTimer.current);
+    dismissGuardTimer.current = setTimeout(() => {
+      dismissGuardActive.current = false;
+    }, DISMISS_GUARD_MS);
+
+    const venue = venues.find((v) => v.id === venueId);
     setSelectedVenueId(venueId);
-    // If sheet is expanded past peek, bring it back to peek so preview card is visible
+    setSelectedDropInKey(null);
     if (sheetIndex > 0) {
       bottomSheetRef.current?.snapToIndex(0);
     }
-  }, [sheetIndex]);
+    if (venue) {
+      mapRef.current?.animateToRegion(
+        {
+          latitude: venue.coordinates.latitude,
+          longitude: venue.coordinates.longitude,
+          latitudeDelta: VENUE_FOCUS_DELTA,
+          longitudeDelta: VENUE_FOCUS_DELTA,
+        },
+        500,
+      );
+    }
+  }, [sheetIndex, venues, tensionAnim]);
 
+  // Tap a drop-in map pin: select it + clear any venue selection.
+  // No pan-dismiss for drop-in pins — they dismiss via × or map background tap.
+  const handleDropInMarkerPress = useCallback(
+    (key: string, coords: { latitude: number; longitude: number }) => {
+      markerTapLock.current = true;
+      requestAnimationFrame(() => { markerTapLock.current = false; });
+
+      setSelectedDropInKey(key);
+      setSelectedVenueId(null);
+      if (sheetIndex > 0) bottomSheetRef.current?.snapToIndex(0);
+      mapRef.current?.animateToRegion(
+        { ...coords, latitudeDelta: VENUE_FOCUS_DELTA, longitudeDelta: VENUE_FOCUS_DELTA },
+        500,
+      );
+    },
+    [sheetIndex],
+  );
+
+  // Reset dismiss state whenever the selected venue changes.
+  // The guard blocks pan-dismiss during the fly-to animation that follows pin tap.
+  useEffect(() => {
+    hasTriggeredDismiss.current = false;
+    tensionAnim.setValue(0);
+    dismissGuardActive.current = true;
+    if (dismissGuardTimer.current !== undefined) clearTimeout(dismissGuardTimer.current);
+    dismissGuardTimer.current = setTimeout(() => {
+      dismissGuardActive.current = false;
+    }, DISMISS_GUARD_MS);
+    return () => { if (dismissGuardTimer.current !== undefined) clearTimeout(dismissGuardTimer.current); };
+  }, [selectedVenueId, tensionAnim]);
+
+  // Clear selection: tap map background or × button.
+  // Guarded by markerTapLock to ignore the spurious MapView.onPress that
+  // Android fires on the same tap event that triggered handleMarkerPress.
   const dismissSelection = useCallback(() => {
+    if (markerTapLock.current) return;
     setSelectedVenueId(null);
+    setSelectedDropInKey(null);
   }, []);
+
+  // Track map pan distance from selected venue.
+  // Called every frame during pan — must NEVER call setState.
+  // Only triggers dismissal (one setState) when threshold is crossed.
+  const handleRegionChange = useCallback(
+    (region: { latitude: number; longitude: number }) => {
+      const venue = selectedVenueRef.current;
+      if (!venue || hasTriggeredDismiss.current || dismissGuardActive.current) {
+        if (!venue) tensionAnim.setValue(0);
+        return;
+      }
+
+      const distMiles = haversineDistance(
+        { latitude: region.latitude, longitude: region.longitude },
+        venue.coordinates,
+      );
+
+      const progress = Math.min(distMiles / DISMISS_THRESHOLD_MILES, 1);
+      tensionAnim.setValue(progress);
+
+      if (distMiles >= DISMISS_THRESHOLD_MILES) {
+        hasTriggeredDismiss.current = true;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        dismissSelection();
+      }
+    },
+    [dismissSelection, tensionAnim],
+  );
 
   const handleVenuePress = useCallback(
     (venueId: string) => navigation.navigate('VenueDetail', { venueId }),
@@ -155,25 +369,20 @@ export function HomeScreen() {
     [navigation]
   );
 
-  // Pre-compute status badges for all venues once (not per render)
-  // Must be declared before filteredVenues since the open_now filter reads it
+  // ── Derived data ──────────────────────────────────────────────────────────
+
   const statusBadges = useMemo(() => {
     const map: Record<string, ReturnType<typeof getVenueStatusBadge>> = {};
-    venues.forEach((v) => {
-      map[v.id] = getVenueStatusBadge(v.id, runs);
-    });
+    venues.forEach((v) => { map[v.id] = getVenueStatusBadge(v.id, runs); });
     return map;
   }, [venues, runs]);
 
-  // Filter venues by active chips, then sort by real distance when available
   const filteredVenues = useMemo(() => {
     let filtered = venues.filter((v) => {
       if (activeFilters.includes('indoor') && v.indoorOutdoor === 'outdoor') return false;
       if (activeFilters.includes('outdoor') && v.indoorOutdoor === 'indoor') return false;
       if (activeFilters.includes('popular_now') && v.popularityScore < 75) return false;
-      // "Open Now" chip now uses real schedule logic via statusBadges
-      if (activeFilters.includes('open_now') && statusBadges[v.id]?.label !== 'Open Now')
-        return false;
+      if (activeFilters.includes('open_now') && statusBadges[v.id]?.label !== 'Open Now') return false;
       const sportFilters = activeFilters.filter((f) =>
         ['basketball', 'volleyball', 'soccer', 'tennis', 'running', 'pickleball'].includes(f)
       );
@@ -182,7 +391,8 @@ export function HomeScreen() {
       return true;
     });
 
-    // Sort by real distance when we have a GPS fix; fallback popularity order otherwise
+    if (searchQuery.trim()) return rankSearch(filtered, searchQuery, coords);
+
     if (coords) {
       return filtered.sort(
         (a, b) =>
@@ -192,30 +402,37 @@ export function HomeScreen() {
     }
 
     return filtered;
-  }, [venues, activeFilters, coords, statusBadges]);
+  }, [venues, activeFilters, coords, statusBadges, searchQuery]);
 
   const selectedVenue = selectedVenueId
     ? venues.find((v) => v.id === selectedVenueId) ?? null
     : null;
 
+  const selectedDropInVenue = selectedDropInKey
+    ? dropInPins.find((p) => p.key === selectedDropInKey) ?? null
+    : null;
+
+  // Keep ref in sync so handleRegionChange can read it without stale closures.
+  selectedVenueRef.current = selectedVenue;
+
+  const venuePreviewVisible  = !!selectedVenue;
+  const dropInPreviewVisible = !!selectedDropInVenue;
+  const anyPreviewVisible    = venuePreviewVisible || dropInPreviewVisible;
+
   const getConditions = (venueId: string) =>
     MOCK_CONDITIONS.find((c) => c.venueId === venueId);
 
-  // Count how many venues have "Open Now" status (shown in sheet subtitle)
   const openNowCount = useMemo(
-    () =>
-      filteredVenues.filter(
-        (v) => statusBadges[v.id]?.label === 'Open Now'
-      ).length,
+    () => filteredVenues.filter((v) => statusBadges[v.id]?.label === 'Open Now').length,
     [filteredVenues, statusBadges]
   );
 
-  // Preview card should only be visible when a pin is selected AND sheet is at peek
-  const previewVisible = selectedVenueId !== null && sheetIndex === 0;
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <View style={styles.container}>
-      {/* ── Full-screen Map ────────────────────────────────────────────────── */}
+
+      {/* ── Full-screen Map ──────────────────────────────────────────────── */}
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFillObject}
@@ -225,7 +442,8 @@ export function HomeScreen() {
         showsUserLocation
         showsCompass={false}
         showsMyLocationButton={false}
-        onPress={dismissSelection}  // tap map background → clear selection
+        onPress={dismissSelection}
+        onRegionChange={handleRegionChange}
       >
         {filteredVenues.map((venue) => (
           <Marker
@@ -241,16 +459,22 @@ export function HomeScreen() {
             />
           </Marker>
         ))}
+
+        {/* Drop-in venue pins — geocoded at runtime, blue to distinguish from venues */}
+        {dropInPins.map((pin) => (
+          <Marker
+            key={`dropin-${pin.key}`}
+            coordinate={{ latitude: pin.latitude, longitude: pin.longitude }}
+            onPress={() => handleDropInMarkerPress(pin.key, { latitude: pin.latitude, longitude: pin.longitude })}
+            tracksViewChanges={false}
+          >
+            <DropInPin isActive={selectedDropInKey === pin.key} />
+          </Marker>
+        ))}
       </MapView>
 
-      {/* ── Locate me button (repositioned above preview card zone) ─────── */}
-      <View
-        style={[
-          styles.locateBtn,
-          // Raise locate button when preview card is visible
-          previewVisible && styles.locateBtnRaised,
-        ]}
-      >
+      {/* ── Locate me button ─────────────────────────────────────────────── */}
+      <View style={[styles.locateBtn, anyPreviewVisible && styles.locateBtnRaised]}>
         <TouchableOpacity
           style={styles.locateBtnInner}
           activeOpacity={0.85}
@@ -263,7 +487,7 @@ export function HomeScreen() {
                   latitudeDelta: 0.06,
                   longitudeDelta: 0.06,
                 },
-                600
+                600,
               );
             }
           }}
@@ -272,7 +496,7 @@ export function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* ── Top overlay: search + filter chips ────────────────────────────── */}
+      {/* ── Top overlay: search + filter chips ──────────────────────────── */}
       <SafeAreaView style={styles.topOverlay} pointerEvents="box-none">
         <View style={styles.searchRow}>
           <SearchBar
@@ -284,25 +508,28 @@ export function HomeScreen() {
         <FilterChipRow activeFilters={activeFilters} onToggle={toggleFilter} />
       </SafeAreaView>
 
-      {/* ── Map preview card — floats above bottom sheet, below filter chips ─ */}
-      {/* Always mounted; animated in/out via `visible` prop */}
-      <View
-        style={[
-          styles.previewCardWrap,
-          { bottom: TAB_BAR_H + PEEK_HEIGHT + 10 },
-        ]}
-        pointerEvents="box-none"
-      >
+      {/* ── Venue preview card — floats above sheet when a venue pin is tapped ── */}
+      <View style={styles.previewCardWrap} pointerEvents="box-none">
         <MapPreviewCard
           venue={selectedVenue}
-          statusBadge={selectedVenueId ? statusBadges[selectedVenueId] : null}
-          visible={previewVisible}
+          statusBadge={selectedVenue ? statusBadges[selectedVenue.id] : null}
+          visible={venuePreviewVisible}
           onViewDetails={handleVenuePress}
           onDismiss={dismissSelection}
+          tensionAnim={tensionAnim}
         />
       </View>
 
-      {/* ── Bottom Sheet ───────────────────────────────────────────────────── */}
+      {/* ── Drop-in preview card — same position, shown when a drop-in pin is tapped ── */}
+      <View style={styles.previewCardWrap} pointerEvents="box-none">
+        <DropInPreviewCard
+          venue={selectedDropInVenue}
+          visible={dropInPreviewVisible}
+          onDismiss={() => setSelectedDropInKey(null)}
+        />
+      </View>
+
+      {/* ── Bottom Sheet ─────────────────────────────────────────────────── */}
       <BottomSheet
         ref={bottomSheetRef}
         index={0}
@@ -310,13 +537,15 @@ export function HomeScreen() {
         backgroundStyle={styles.sheetBg}
         handleIndicatorStyle={styles.sheetHandle}
         enablePanDownToClose={false}
+        containerStyle={styles.sheetContainer}
         onChange={(index) => {
           setSheetIndex(index);
-          // Expanding past peek → dismiss preview card (map is hidden anyway)
+          // Clear venue selection when sheet expands — preview card drops away.
           if (index > 0) setSelectedVenueId(null);
         }}
       >
-        {/* Sheet header */}
+
+        {/* Header — always visible: title, count, and tab toggle */}
         <View style={styles.sheetHeader}>
           <View style={styles.sheetTitleBlock}>
             <Text style={styles.sheetTitle}>Nearby</Text>
@@ -326,7 +555,6 @@ export function HomeScreen() {
                 : `${filteredVenues.length} spots found`}
             </Text>
           </View>
-
           <View style={styles.tabToggle}>
             <TouchableOpacity
               style={[styles.tabBtn, activeTab === 'venues' && styles.tabBtnActive]}
@@ -349,7 +577,7 @@ export function HomeScreen() {
           </View>
         </View>
 
-        {/* Sheet content */}
+        {/* Scrollable venue / run list */}
         <BottomSheetScrollView
           contentContainerStyle={styles.sheetContent}
           showsVerticalScrollIndicator={false}
@@ -360,6 +588,19 @@ export function HomeScreen() {
               color={Colors.accent.orange}
               style={styles.loader}
             />
+          ) : (activeTab === 'venues' ? venuesError : runsError) ? (
+            <View style={styles.errorBox}>
+              <Text style={styles.errorText}>
+                {activeTab === 'venues' ? venuesError : runsError}
+              </Text>
+              <TouchableOpacity
+                style={styles.retryBtn}
+                onPress={activeTab === 'venues' ? refetchVenues : refetchRuns}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.retryText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
           ) : activeTab === 'venues'
             ? filteredVenues.map((venue) => (
                 <VenueCard
@@ -367,7 +608,7 @@ export function HomeScreen() {
                   venue={venue}
                   outdoorConditions={getConditions(venue.id)}
                   statusBadge={statusBadges[venue.id]}
-                  onPress={() => handleVenuePress(venue.id)}
+                  onPress={() => handleMarkerPress(venue.id)}
                   variant="sheet"
                 />
               ))
@@ -379,6 +620,7 @@ export function HomeScreen() {
                 />
               ))}
         </BottomSheetScrollView>
+
       </BottomSheet>
     </View>
   );
@@ -390,29 +632,30 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a2744',
   },
 
-  // Top overlay
+  // ── Top overlay ────────────────────────────────────────────────────────────
   topOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    gap: Spacing.sm,
+    gap: Spacing.xs,
     paddingTop: Platform.OS === 'android' ? Spacing.xxxl : 0,
+    paddingBottom: Spacing.sm,
   },
   searchRow: {
     paddingHorizontal: Spacing.base,
     paddingTop: Spacing.sm,
   },
 
-  // Locate button — default position is right side, above sheet peek
+  // ── Locate button ──────────────────────────────────────────────────────────
   locateBtn: {
     position: 'absolute',
     right: Spacing.base,
     bottom: PEEK_HEIGHT + TAB_BAR_H + Spacing.lg,
   },
-  // When preview card is showing, raise it further so they don't overlap
+  // Raised when the preview card is visible to avoid overlap.
   locateBtnRaised: {
-    bottom: PEEK_HEIGHT + TAB_BAR_H + 90,
+    bottom: PEEK_HEIGHT + TAB_BAR_H + Spacing.lg + 80,
   },
   locateBtnInner: {
     width: 44,
@@ -424,14 +667,17 @@ const styles = StyleSheet.create({
     ...Shadow.md,
   },
 
-  // Preview card container — absolute, sits just above the sheet
+  // ── Venue preview card wrapper ─────────────────────────────────────────────
   previewCardWrap: {
     position: 'absolute',
     left: Spacing.base,
     right: Spacing.base,
+    bottom: PEEK_HEIGHT + TAB_BAR_H + Spacing.base,
+    zIndex: 99,
+    elevation: 99,
   },
 
-  // Bottom sheet
+  // ── Bottom sheet chrome ────────────────────────────────────────────────────
   sheetBg: {
     backgroundColor: Colors.bg.sheet,
     borderTopLeftRadius: Radius.xxl,
@@ -443,18 +689,24 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
   },
+  sheetContainer: {
+    zIndex: 100,
+    elevation: 100,
+  },
+
+  // ── Sheet header ───────────────────────────────────────────────────────────
   sheetHeader: {
-    paddingHorizontal: Spacing.base,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.md,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: Spacing.base,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border.light,
   },
   sheetTitleBlock: {
-    gap: 2,
+    gap: 1,
   },
   sheetTitle: {
     fontSize: FontSize.lg,
@@ -473,7 +725,7 @@ const styles = StyleSheet.create({
   },
   tabBtn: {
     paddingHorizontal: Spacing.md,
-    paddingVertical: 5,
+    paddingVertical: 4,
     borderRadius: Radius.full,
   },
   tabBtnActive: {
@@ -489,11 +741,36 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
     fontWeight: FontWeight.semibold,
   },
+
+  // ── Sheet scrollable content ───────────────────────────────────────────────
   sheetContent: {
-    padding: Spacing.md,
-    paddingBottom: Spacing.xxxl,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: 80,
   },
   loader: {
     marginTop: Spacing.xxxl,
+  },
+  errorBox: {
+    alignItems: 'center',
+    marginTop: Spacing.xxxl,
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+  },
+  errorText: {
+    fontSize: FontSize.sm,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+  },
+  retryBtn: {
+    backgroundColor: Colors.accent.orangeSubtle,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+  },
+  retryText: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: Colors.accent.orange,
   },
 });

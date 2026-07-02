@@ -55,8 +55,8 @@ const SORT_OPTIONS: Array<{ id: SortOption; label: string }> = [
 export function ExploreScreen() {
   const navigation = useNavigation<Nav>();
   const { coords } = useLocationContext();
-  const { venues, isLoading: venuesLoading } = useVenues();
-  const { runs, isLoading: runsLoading } = useRuns();
+  const { venues, isLoading: venuesLoading, error: venuesError, refetch: refetchVenues } = useVenues();
+  const { runs, isLoading: runsLoading, error: runsError, refetch: refetchRuns } = useRuns();
   const { setPendingVenueId } = useMapFocus();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -247,6 +247,15 @@ export function ExploreScreen() {
                 color={Colors.accent.orange}
                 style={styles.loader}
               />
+            ) : venuesError ? (
+              <View style={styles.empty}>
+                <Text style={styles.emptyEmoji}>⚠️</Text>
+                <Text style={styles.emptyTitle}>Couldn't load venues</Text>
+                <Text style={styles.emptySubtitle}>{venuesError}</Text>
+                <TouchableOpacity style={styles.retryBtn} onPress={refetchVenues} activeOpacity={0.8}>
+                  <Text style={styles.retryText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
             ) : (
               <View style={styles.empty}>
                 <Text style={styles.emptyEmoji}>🔍</Text>
@@ -287,6 +296,15 @@ export function ExploreScreen() {
                 color={Colors.accent.orange}
                 style={styles.loader}
               />
+            ) : runsError ? (
+              <View style={styles.empty}>
+                <Text style={styles.emptyEmoji}>⚠️</Text>
+                <Text style={styles.emptyTitle}>Couldn't load runs</Text>
+                <Text style={styles.emptySubtitle}>{runsError}</Text>
+                <TouchableOpacity style={styles.retryBtn} onPress={refetchRuns} activeOpacity={0.8}>
+                  <Text style={styles.retryText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
             ) : (
               <View style={styles.empty}>
                 <Text style={styles.emptyEmoji}>🔍</Text>
@@ -467,5 +485,17 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     fontSize: FontSize.base,
     color: Colors.text.secondary,
+  },
+  retryBtn: {
+    backgroundColor: Colors.accent.orangeSubtle,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    marginTop: Spacing.xs,
+  },
+  retryText: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: Colors.accent.orange,
   },
 });

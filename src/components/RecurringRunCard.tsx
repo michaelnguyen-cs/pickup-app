@@ -15,7 +15,6 @@ import {
   formatSkillLevel,
   formatCost,
   formatDistance,
-  mockDistance,
   haversineDistance,
 } from '../utils/formatting';
 import { PopularityBadge } from './PopularityBadge';
@@ -48,9 +47,7 @@ export function RecurringRunCard({ run, onPress, variant = 'default' }: Recurrin
   const { coords } = useLocationContext();
   const { isRunSaved, toggleRunSaved } = useSavedContext();
   const sport = SPORT_MAP[run.sport];
-  const distance = coords
-    ? haversineDistance(coords, run.venueCoordinates)
-    : mockDistance(run.venueId);
+  const distance = coords ? haversineDistance(coords, run.venueCoordinates) : null;
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.88} style={styles.card}>

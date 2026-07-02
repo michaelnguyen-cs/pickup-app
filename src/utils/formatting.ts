@@ -134,7 +134,8 @@ export function formatCost(cost?: number): string {
 }
 
 // Distance in miles
-export function formatDistance(miles: number): string {
+export function formatDistance(miles: number | null): string {
+  if (miles == null) return '—';
   if (miles < 0.1) return 'Nearby';
   if (miles < 1) return `${(miles * 5280).toFixed(0)} ft`;
   return `${miles.toFixed(1)} mi`;
