@@ -237,7 +237,10 @@ export function ProfileScreen() {
               <Text style={styles.signOutText}>Sign Out</Text>
             </TouchableOpacity>
           )}
-          {user?.email === process.env.EXPO_PUBLIC_ADMIN_EMAIL && (
+          {/* Visible to any signed-in user; the RPCs behind this screen enforce
+              admin membership server-side via public.is_admin(), so a non-admin
+              tapping through gets a rejected request, not a data leak. */}
+          {user && (
             <TouchableOpacity
               style={styles.appRow}
               onPress={() => navigation.navigate('AdminCandidateReview')}
