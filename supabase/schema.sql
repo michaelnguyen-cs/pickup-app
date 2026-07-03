@@ -211,6 +211,35 @@ CREATE POLICY "run_attendance_delete_own"
   USING (auth.uid() = user_id);
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- 7. RUN_REPORTS
+-- User-submitted reports about a run (no one showed up, wrong time, etc.)
+-- One row per report; multiple reports from the same user on the same run
+-- are allowed so that successive visits can each be reported independently.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS public.run_reports (
+  id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  run_id      uuid        NOT NULL REFERENCES public.runs(id) ON DELETE CASCADE,
+  report_type text        NOT NULL CHECK (report_type IN ('no_one_there','wrong_time','closed_location')),
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_run_reports_run  ON public.run_reports(run_id);
+CREATE INDEX IF NOT EXISTS idx_run_reports_user ON public.run_reports(user_id);
+
+ALTER TABLE public.run_reports ENABLE ROW LEVEL SECURITY;
+
+-- Users can insert their own reports; can read back their own reports only
+CREATE POLICY "run_reports_insert_own"
+  ON public.run_reports FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "run_reports_select_own"
+  ON public.run_reports FOR SELECT
+  USING (auth.uid() = user_id);
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- AUTO-CREATE PROFILE ON SIGNUP
 -- Runs as SECURITY DEFINER so it can insert into profiles even before the
 -- user's session is established. Triggered after every auth.users INSERT.
