@@ -118,6 +118,11 @@ export interface RecurringRun {
   // Phase 8 trust / freshness fields (null for admin-entered runs pre-Phase 7)
   confidenceScore?: number | null;
   lastVerifiedAt?: string | null;
+  // Phase 16 seasonality fields (optional — undefined for mock/pre-Phase-16 runs)
+  isSeasonal?: boolean;
+  seasonStartMonth?: number | null; // 1-12
+  seasonEndMonth?: number | null;   // 1-12; may be < seasonStartMonth (wraps new year)
+  seasonNotes?: string | null;
 }
 
 // ─── One-Time Event ───────────────────────────────────────────────────────────

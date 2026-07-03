@@ -264,6 +264,21 @@ export function RunDetailScreen() {
             </View>
           )}
 
+          {/* Seasonal warning */}
+          {run.isSeasonal && (
+            <View style={styles.seasonalBanner}>
+              <View style={styles.seasonalHeader}>
+                <Ionicons name="calendar-outline" size={14} color={Colors.accent.orange} />
+                <Text style={styles.seasonalText}>
+                  Seasonal: runs month {run.seasonStartMonth} through month {run.seasonEndMonth}
+                </Text>
+              </View>
+              {run.seasonNotes && (
+                <Text style={styles.seasonalNotes}>{run.seasonNotes}</Text>
+              )}
+            </View>
+          )}
+
           {/* Weather — outdoor runs only */}
           {!run.isIndoor && weather && (
             <View style={[styles.trustBadge, {
@@ -454,6 +469,28 @@ const styles = StyleSheet.create({
   trustText: {
     fontSize: FontSize.xs,
     fontWeight: FontWeight.semibold,
+  },
+  seasonalBanner: {
+    alignSelf: 'flex-start',
+    gap: 3,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.md,
+    backgroundColor: 'rgba(255,92,26,0.10)', // Colors.accent.orange @ 10%
+  },
+  seasonalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  seasonalText: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.semibold,
+    color: Colors.accent.orange,
+  },
+  seasonalNotes: {
+    fontSize: FontSize.xs,
+    color: Colors.text.secondary,
   },
   heroSection: {
     flexDirection: 'row',

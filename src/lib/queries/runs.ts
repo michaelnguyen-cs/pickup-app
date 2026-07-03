@@ -52,6 +52,10 @@ function mapRunRow(row: RunQueryRow): RecurringRun {
     createdAt: row.created_at,
     confidenceScore: row.confidence_score ?? null,
     lastVerifiedAt: row.last_verified_at ?? null,
+    isSeasonal: row.is_seasonal,
+    seasonStartMonth: row.season_start_month ?? null,
+    seasonEndMonth: row.season_end_month ?? null,
+    seasonNotes: row.season_notes ?? null,
   };
 }
 
