@@ -10,15 +10,16 @@ import { SPORT_MAP, SportId } from '../constants/sports';
 import { FontSize } from '../constants/typography';
 
 interface MapPinProps {
-  sport: SportId;
+  sport?: SportId;     // omitted for cluster pins — not rendered in that branch
   isActive?: boolean;
   isPopular?: boolean; // adds subtle ring
   count?: number;      // for cluster pins
 }
 
-export function MapPin({ sport, isActive = false, isPopular = false, count }: MapPinProps) {
-  const sportData = SPORT_MAP[sport];
-
+// React.memo prevents custom marker views from re-rendering on every map state
+// change (e.g. sheet drag, filter toggle). Combined with tracksViewChanges={false}
+// on the Marker, this eliminates the main source of map FPS drops.
+export const MapPin = React.memo(function MapPin({ sport, isActive = false, isPopular = false, count }: MapPinProps) {
   if (count && count > 1) {
     // Cluster pin
     return (
@@ -27,6 +28,8 @@ export function MapPin({ sport, isActive = false, isPopular = false, count }: Ma
       </View>
     );
   }
+
+  const sportData = sport ? SPORT_MAP[sport] : undefined;
 
   return (
     <View style={styles.wrapper}>
@@ -38,7 +41,7 @@ export function MapPin({ sport, isActive = false, isPopular = false, count }: Ma
       <View style={[styles.tail, isActive && styles.tailActive]} />
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrapper: {
@@ -89,14 +92,20 @@ const styles = StyleSheet.create({
     borderTopColor: '#FFF',
   },
   cluster: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    minWidth: 40,
+    height: 40,
+    borderRadius: 20,
+    paddingHorizontal: 6,
     backgroundColor: Colors.pin.cluster,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: '#FFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
   clusterText: {
     fontSize: FontSize.sm,

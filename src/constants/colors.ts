@@ -30,7 +30,7 @@ export const Colors = {
   pin: {
     default: '#FF5C1A',
     active: '#FFFFFF',
-    cluster: '#1A1A1A',
+    cluster: '#FF5C1A',
     clusterText: '#FFFFFF',
   },
 

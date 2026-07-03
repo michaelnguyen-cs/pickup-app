@@ -64,7 +64,7 @@ export interface Venue {
   amenities: string[];            // e.g. ['parking', 'restrooms', 'water fountain']
   phone?: string;
   website?: string;
-  popularityScore: number;        // 0–100
+  popularityScore: number | null; // 0–100 — null when not real activity data (e.g. unreviewed imports)
   currentOccupancy?: number;      // live estimate (mock)
   maxOccupancy?: number;
   isSaved?: boolean;

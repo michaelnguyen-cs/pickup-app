@@ -25,7 +25,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Venue, OutdoorConditions } from '../data/types';
-import { StatusBadge, formatDistance, haversineDistance } from '../utils/formatting';
+import { StatusBadge, formatDistance, haversineDistance, formatAddress } from '../utils/formatting';
 import { Colors } from '../constants/colors';
 import { FontSize, FontWeight } from '../constants/typography';
 import { Radius, Shadow, Spacing } from '../constants/spacing';
@@ -122,9 +122,9 @@ export function VenueCard({
 
         {/* Info right column */}
         <View style={styles.sheetInfo}>
-          {/* Name + distance on same row */}
+          {/* Name (wraps to 2 lines) + distance pill, top-aligned */}
           <View style={styles.sheetTopRow}>
-            <Text style={styles.sheetName} numberOfLines={1}>
+            <Text style={styles.sheetName} numberOfLines={2}>
               {venue.name}
             </Text>
             <View style={styles.distancePill}>
@@ -237,7 +237,7 @@ export function VenueCard({
         {/* Name */}
         <Text style={styles.listName}>{venue.name}</Text>
         <Text style={styles.listAddress} numberOfLines={1}>
-          {venue.address}, {venue.city}
+          {formatAddress(venue.address)}
         </Text>
 
         {/* Footer: status + popularity + weather + optional map shortcut */}
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
   },
   sheetTopRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: Spacing.xs,
   },
@@ -319,6 +319,7 @@ const styles = StyleSheet.create({
     fontSize: FontSize.base,
     fontWeight: FontWeight.bold,
     color: Colors.text.primary,
+    lineHeight: FontSize.base * 1.25,
     flex: 1,
   },
   distancePill: {
@@ -330,6 +331,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: Radius.full,
     flexShrink: 0,
+    marginTop: 1,
   },
   distancePillText: {
     fontSize: 11,

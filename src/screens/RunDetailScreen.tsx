@@ -37,6 +37,7 @@ import {
   formatScheduleSummary,
   formatSkillLevel,
   formatCost,
+  formatAddress,
 } from '../utils/formatting';
 import { RootStackParamList } from '../navigation/types';
 import { useSavedContext } from '../context/SavedContext';
@@ -373,7 +374,7 @@ export function RunDetailScreen() {
                 <Ionicons name="location-outline" size={18} color={Colors.accent.orange} />
                 <View>
                   <Text style={styles.venueLinkName}>{venue.name}</Text>
-                  <Text style={styles.venueLinkAddress}>{venue.address}</Text>
+                  <Text style={styles.venueLinkAddress}>{formatAddress(venue.address)}</Text>
                 </View>
               </View>
               <Ionicons name="chevron-forward" size={16} color={Colors.text.tertiary} />

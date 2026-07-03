@@ -12,6 +12,19 @@ import { Venue } from '../../data/types';
 import { VenueRow } from '../../types/database';
 import { SportId } from '../../constants/sports';
 
+// scripts/import-venues.ts prepends this to `description` when a venue's
+// is_indoor value was unverified at import time (see UNVERIFIED_INDOOR_FLAG
+// there). It's an internal QA breadcrumb for admins reviewing import
+// candidates — never meant for end users, so strip it before display. The
+// raw, flagged value stays in the DB untouched.
+const UNVERIFIED_INDOOR_QA_PREFIX = '⚠ is_indoor unverified — needs manual review.';
+
+function stripQaPrefix(description: string): string {
+  return description.startsWith(UNVERIFIED_INDOOR_QA_PREFIX)
+    ? description.slice(UNVERIFIED_INDOOR_QA_PREFIX.length).trim()
+    : description;
+}
+
 function mapVenueRow(row: VenueRow): Venue {
   return {
     id: row.id,
@@ -29,9 +42,14 @@ function mapVenueRow(row: VenueRow): Venue {
     },
     indoorOutdoor: row.is_indoor ? 'indoor' : 'outdoor',
     imageUrl: row.image_url ?? '',
-    description: row.description ?? '',
+    description: row.description ? stripQaPrefix(row.description) : '',
     amenities: [],                      // not in schema yet
-    popularityScore: row.popularity_score,
+    // popularity_score defaults to 50 for every auto-imported venue (see
+    // scripts/import-venues.ts) — that's a placeholder, not a measured
+    // signal. Only trust it for manually-curated venues (import_source
+    // null); otherwise treat it as unknown, same honesty principle as
+    // RecurringRun.typicalTurnout/popularityScore (lib/queries/runs.ts).
+    popularityScore: row.import_source ? null : row.popularity_score,
     tags: [],                           // not in schema yet
     createdAt: row.created_at,
   };

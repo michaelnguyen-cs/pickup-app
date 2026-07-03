@@ -28,7 +28,8 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import Supercluster from 'supercluster';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -119,6 +120,35 @@ const DISMISS_THRESHOLD_MILES = 0.15;
 // How long after venue selection to ignore pan-dismiss (covers the fly-to animation).
 const DISMISS_GUARD_MS = 700;
 
+// ── Clustering ────────────────────────────────────────────────────────────────
+// Pixel radius supercluster groups pins within, and the zoom level past which
+// it stops clustering entirely (individual pins only from here in).
+const CLUSTER_RADIUS = 50;
+const CLUSTER_MAX_ZOOM = 16;
+
+interface VenuePointProps {
+  venueId: string;
+}
+
+// Standard web-mercator zoom estimate from a MapView region's longitude span.
+function regionToZoom(region: { longitudeDelta: number }): number {
+  return Math.max(0, Math.min(20, Math.log2(360 / region.longitudeDelta)));
+}
+
+function regionToBBox(region: {
+  latitude: number;
+  longitude: number;
+  latitudeDelta: number;
+  longitudeDelta: number;
+}): [number, number, number, number] {
+  return [
+    region.longitude - region.longitudeDelta / 2,
+    Math.max(-90, region.latitude - region.latitudeDelta / 2),
+    region.longitude + region.longitudeDelta / 2,
+    Math.min(90, region.latitude + region.latitudeDelta / 2),
+  ];
+}
+
 export function HomeScreen() {
   const navigation = useNavigation<Nav>();
   const mapRef = useRef<MapView>(null);
@@ -150,6 +180,11 @@ export function HomeScreen() {
   const [sheetIndex, setSheetIndex] = useState(0);
   const [dropInPins, setDropInPins] = useState<DropInVenuePin[]>([]);
   const [selectedDropInKey, setSelectedDropInKey] = useState<string | null>(null);
+  // Current map viewport — drives cluster recomputation. Updated only on
+  // onRegionChangeComplete (gesture/animation settled), never on every pan
+  // frame, so re-clustering doesn't fight the continuous onRegionChange
+  // handler used for pan-dismiss tracking below.
+  const [mapRegion, setMapRegion] = useState<Region>(FALLBACK_REGION);
 
   const snapPoints = useMemo(() => [PEEK_HEIGHT, '58%', '92%'], []);
 
@@ -360,6 +395,11 @@ export function HomeScreen() {
     [dismissSelection, tensionAnim],
   );
 
+  // Cluster recompute trigger — fires once per gesture/animation, not per frame.
+  const handleRegionChangeComplete = useCallback((region: Region) => {
+    setMapRegion(region);
+  }, []);
+
   const handleVenuePress = useCallback(
     (venueId: string) => navigation.navigate('VenueDetail', { venueId }),
     [navigation]
@@ -382,7 +422,7 @@ export function HomeScreen() {
     let filtered = venues.filter((v) => {
       if (activeFilters.includes('indoor') && v.indoorOutdoor === 'outdoor') return false;
       if (activeFilters.includes('outdoor') && v.indoorOutdoor === 'indoor') return false;
-      if (activeFilters.includes('popular_now') && v.popularityScore < 75) return false;
+      if (activeFilters.includes('popular_now') && (v.popularityScore ?? 0) < 75) return false;
       if (activeFilters.includes('open_now') && statusBadges[v.id]?.label !== 'Open Now') return false;
       const sportFilters = activeFilters.filter((f) => FILTER_SPORTS.includes(f as SportId));
       if (sportFilters.length > 0 && !sportFilters.some((s) => v.sports.includes(s as any)))
@@ -402,6 +442,56 @@ export function HomeScreen() {
 
     return filtered;
   }, [venues, activeFilters, coords, statusBadges, searchQuery]);
+
+  const venueById = useMemo(() => {
+    const map = new Map<string, typeof filteredVenues[number]>();
+    filteredVenues.forEach((v) => map.set(v.id, v));
+    return map;
+  }, [filteredVenues]);
+
+  // Rebuilt whenever the filtered venue set changes — cheap even at thousands
+  // of points, since supercluster indexes are built for exactly this.
+  const clusterIndex = useMemo(() => {
+    const index = new Supercluster<VenuePointProps>({
+      radius: CLUSTER_RADIUS,
+      maxZoom: CLUSTER_MAX_ZOOM,
+    });
+    index.load(
+      filteredVenues.map((v) => ({
+        type: 'Feature',
+        properties: { venueId: v.id },
+        geometry: {
+          type: 'Point',
+          coordinates: [v.coordinates.longitude, v.coordinates.latitude],
+        },
+      }))
+    );
+    return index;
+  }, [filteredVenues]);
+
+  // Cluster/point features visible in the current viewport at the current zoom.
+  const clusterFeatures = useMemo(
+    () => clusterIndex.getClusters(regionToBBox(mapRegion), regionToZoom(mapRegion)),
+    [clusterIndex, mapRegion]
+  );
+
+  // Tap a cluster badge: zoom in to the level where it splits apart.
+  const handleClusterPress = useCallback((clusterId: number, coordinate: { latitude: number; longitude: number }) => {
+    const expansionZoom = Math.min(clusterIndex.getClusterExpansionZoom(clusterId), 20);
+    const newLongitudeDelta = 360 / Math.pow(2, expansionZoom);
+    const aspectRatio = mapRegion.longitudeDelta > 0
+      ? mapRegion.latitudeDelta / mapRegion.longitudeDelta
+      : 1;
+    mapRef.current?.animateToRegion(
+      {
+        latitude: coordinate.latitude,
+        longitude: coordinate.longitude,
+        latitudeDelta: newLongitudeDelta * aspectRatio,
+        longitudeDelta: newLongitudeDelta,
+      },
+      450,
+    );
+  }, [clusterIndex, mapRegion]);
 
   const selectedVenue = selectedVenueId
     ? venues.find((v) => v.id === selectedVenueId) ?? null
@@ -443,21 +533,43 @@ export function HomeScreen() {
         showsMyLocationButton={false}
         onPress={dismissSelection}
         onRegionChange={handleRegionChange}
+        onRegionChangeComplete={handleRegionChangeComplete}
       >
-        {filteredVenues.map((venue) => (
-          <Marker
-            key={venue.id}
-            coordinate={venue.coordinates}
-            onPress={() => handleMarkerPress(venue.id)}
-            tracksViewChanges={false}
-          >
-            <MapPin
-              sport={venue.sports[0]}
-              isActive={selectedVenueId === venue.id}
-              isPopular={venue.popularityScore >= 85}
-            />
-          </Marker>
-        ))}
+        {clusterFeatures.map((feature) => {
+          const [longitude, latitude] = feature.geometry.coordinates;
+
+          if ('cluster' in feature.properties && feature.properties.cluster) {
+            const { cluster_id: clusterId, point_count: pointCount } = feature.properties;
+            return (
+              <Marker
+                key={`cluster-${clusterId}`}
+                coordinate={{ latitude, longitude }}
+                onPress={() => handleClusterPress(clusterId, { latitude, longitude })}
+                tracksViewChanges={false}
+              >
+                <MapPin count={pointCount} />
+              </Marker>
+            );
+          }
+
+          const venue = venueById.get(feature.properties.venueId);
+          if (!venue) return null;
+
+          return (
+            <Marker
+              key={venue.id}
+              coordinate={venue.coordinates}
+              onPress={() => handleMarkerPress(venue.id)}
+              tracksViewChanges={false}
+            >
+              <MapPin
+                sport={venue.sports[0]}
+                isActive={selectedVenueId === venue.id}
+                isPopular={venue.popularityScore != null && venue.popularityScore >= 85}
+              />
+            </Marker>
+          );
+        })}
 
         {/* Drop-in venue pins — geocoded at runtime, blue to distinguish from venues */}
         {dropInPins.map((pin) => (

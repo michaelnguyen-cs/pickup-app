@@ -75,6 +75,9 @@ export type Database = {
           reservation_policy: string | null; // 'required'|'peak_only'|'recommended'|'first_come'
           reservation_url: string | null;
           busy_hours_note: string | null;
+          // Phase 14 column — null for manually-created/seed venues, else
+          // 'google_places' | 'overpass_osm'.
+          import_source: string | null;
         };
         Insert: {
           id?: string;

@@ -81,6 +81,13 @@ export function formatOccupancy(current: number, max: number): string {
   return `${current} here`;
 }
 
+// Venue address for display — the DB address field already contains
+// city/state/country (Google Places formattedAddress etc.), so this only
+// drops the trailing country suffix. Never append city/state again.
+export function formatAddress(address: string): string {
+  return address.replace(/,\s*(USA|United States)\s*$/i, '').trim();
+}
+
 // Skill level → display label
 export function formatSkillLevel(level: SkillLevel): string {
   const labels: Record<SkillLevel, string> = {

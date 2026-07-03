@@ -23,6 +23,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { MOCK_CONDITIONS, MOCK_POPULARITY } from '../data/mockConditions';
 import { MOCK_CHAT_ROOMS } from '../data/mockChats';
@@ -39,22 +40,40 @@ import { DetailInfoRow } from '../components/DetailInfoRow';
 import {
   formatIndoorOutdoor,
   formatOccupancy,
+  formatAddress,
 } from '../utils/formatting';
 import { getOutdoorSummary } from '../utils/weather';
 import { RootStackParamList } from '../navigation/types';
 import { useSavedContext } from '../context/SavedContext';
-import { Venue, RecurringRun } from '../data/types';
+import { useAuthContext } from '../context/AuthContext';
+import { Venue, RecurringRun, ReservationPolicy } from '../data/types';
 import { fetchVenueById } from '../lib/queries/venues';
 import { fetchRunsByVenueId } from '../lib/queries/runs';
+import {
+  getVenueTier,
+  getValidSports,
+  TIER_CONFIG,
+  TIER_2_DISCLAIMER,
+  NO_COMPATIBLE_SPORTS_REASON,
+} from '../constants/venueValidation';
 
 type RouteType = RouteProp<RootStackParamList, 'VenueDetail'>;
+type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+const RESERVATION_POLICY_CONFIG: Record<ReservationPolicy, { icon: React.ComponentProps<typeof Ionicons>['name']; color: string; label: string }> = {
+  required:    { icon: 'lock-closed-outline',        color: '#EF4444', label: 'Reservation required'                   },
+  peak_only:   { icon: 'time-outline',               color: '#F59E0B', label: 'Reservation needed for peak hours'       },
+  recommended: { icon: 'calendar-outline',           color: '#3B82F6', label: 'Reservation recommended'                 },
+  first_come:  { icon: 'walk-outline',               color: '#22C55E', label: 'First-come, first-served'               },
+};
 
 export function VenueDetailScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<Nav>();
   const route = useRoute<RouteType>();
   const { venueId } = route.params;
 
   const { isSaved, toggleSaved } = useSavedContext();
+  const { user, isEmailVerified, resendVerificationEmail, profile } = useAuthContext();
 
   const [venue, setVenue] = useState<Venue | null>(null);
   const [runsHere, setRunsHere] = useState<RecurringRun[]>([]);
@@ -95,6 +114,14 @@ export function VenueDetailScreen() {
   }
 
   const isOutdoor = venue.indoorOutdoor !== 'indoor';
+  const tier = getVenueTier(venue);
+  const tierCfg = TIER_CONFIG[tier];
+
+  // Sports that are both listed on the venue AND compatible with its type.
+  // Filters out data-quality mismatches (e.g. basketball_court listing 'swimming').
+  const validSports = getValidSports(venue);
+  const hasCompatibleSports = validSports.length > 0;
+  const canCreateRunHere = tier !== 3 && hasCompatibleSports;
 
   return (
     <View style={styles.container}>
@@ -137,14 +164,14 @@ export function VenueDetailScreen() {
               ))}
             </View>
             <Text style={styles.heroTitle}>{venue.name}</Text>
-            <Text style={styles.heroAddress}>{venue.address}, {venue.city}</Text>
+            <Text style={styles.heroAddress}>{formatAddress(venue.address)}</Text>
           </View>
         </View>
 
         {/* ── Content ────────────────────────────────────────────────── */}
         <View style={styles.content}>
 
-          {/* Status bar: popularity + weather + indoor/outdoor */}
+          {/* Status bar: popularity + weather + indoor/outdoor + tier */}
           <View style={styles.statusBar}>
             <PopularityBadge score={venue.popularityScore} />
             <View style={styles.dot} />
@@ -155,6 +182,11 @@ export function VenueDetailScreen() {
                 <WeatherBadge conditions={conditions} variant="compact" />
               </>
             )}
+            <View style={styles.dot} />
+            <View style={[styles.tierBadge, { backgroundColor: tierCfg.bg }]}>
+              <Ionicons name={tierCfg.icon} size={11} color={tierCfg.color} />
+              <Text style={[styles.tierBadgeText, { color: tierCfg.color }]}>{tierCfg.label}</Text>
+            </View>
           </View>
 
           {/* Outdoor warning */}
@@ -173,7 +205,7 @@ export function VenueDetailScreen() {
             <DetailInfoRow
               icon="location-outline"
               label="Address"
-              value={`${venue.address}, ${venue.city}`}
+              value={formatAddress(venue.address)}
             />
             <DetailInfoRow
               icon="home-outline"
@@ -190,7 +222,7 @@ export function VenueDetailScreen() {
                 value={
                   venue.currentOccupancy && venue.maxOccupancy
                     ? formatOccupancy(venue.currentOccupancy, venue.maxOccupancy)
-                    : `~${venue.popularityScore}% capacity`
+                    : `~${venue.popularityScore ?? 0}% capacity`
                 }
               />
             )}
@@ -203,6 +235,42 @@ export function VenueDetailScreen() {
               />
             )}
           </View>
+
+          {/* ── Reservation awareness ────────────────────────────────── */}
+          {(venue.reservationPolicy || venue.busyHoursNote) && (() => {
+            const policyCfg = venue.reservationPolicy
+              ? RESERVATION_POLICY_CONFIG[venue.reservationPolicy]
+              : null;
+            return (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Reservations</Text>
+                <View style={styles.reservationCard}>
+                  {policyCfg && (
+                    <View style={styles.reservationStatusRow}>
+                      <Ionicons name={policyCfg.icon} size={15} color={policyCfg.color} />
+                      <Text style={[styles.reservationStatusText, { color: policyCfg.color }]}>
+                        {policyCfg.label}
+                      </Text>
+                    </View>
+                  )}
+                  {venue.busyHoursNote && (
+                    <Text style={styles.busyHoursNote}>{venue.busyHoursNote}</Text>
+                  )}
+                  {venue.reservationUrl && (
+                    <TouchableOpacity
+                      style={styles.reserveBtn}
+                      onPress={() => Linking.openURL(venue.reservationUrl!).catch(() => {})}
+                      activeOpacity={0.82}
+                    >
+                      <Ionicons name="calendar-outline" size={15} color={Colors.accent.orange} />
+                      <Text style={styles.reserveBtnText}>Reserve Court</Text>
+                      <Ionicons name="open-outline" size={13} color={Colors.accent.orange} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            );
+          })()}
 
           {/* ── Amenities ─────────────────────────────────────────────── */}
           {venue.amenities.length > 0 && (
@@ -219,14 +287,22 @@ export function VenueDetailScreen() {
           )}
 
           {/* ── Recurring Runs at this venue ──────────────────────────── */}
-          {runsHere.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Recurring Runs Here</Text>
-              {runsHere.map((run) => (
-                <RecurringRunCard key={run.id} run={run} />
-              ))}
-            </View>
-          )}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Recurring Runs Here</Text>
+            {runsHere.length > 0 ? (
+              runsHere.map((run) => <RecurringRunCard key={run.id} run={run} />)
+            ) : (
+              <View style={styles.emptyRunsCard}>
+                <Ionicons name="calendar-clear-outline" size={22} color={Colors.text.tertiary} />
+                <Text style={styles.emptyRunsTitle}>No scheduled runs yet</Text>
+                <Text style={styles.emptyRunsSubtitle}>
+                  {canCreateRunHere
+                    ? 'Be the first — tap "Create Run Here" below to start one.'
+                    : 'Check back later or explore other venues nearby.'}
+                </Text>
+              </View>
+            )}
+          </View>
 
           {/* ── Group Chat ────────────────────────────────────────────── */}
           {chatRoom && (
@@ -251,7 +327,7 @@ export function VenueDetailScreen() {
         <TouchableOpacity
           style={styles.actionSecondary}
           onPress={() => {
-            const query = encodeURIComponent(`${venue.address}, ${venue.city}`);
+            const query = encodeURIComponent(formatAddress(venue.address));
             const appleUrl = `maps://?q=${query}`;
             const googleUrl = `https://maps.google.com/?q=${query}`;
             Linking.canOpenURL(appleUrl)
@@ -263,14 +339,70 @@ export function VenueDetailScreen() {
           <Ionicons name="navigate-outline" size={18} color={Colors.text.primary} />
           <Text style={styles.actionSecondaryText}>Directions</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionPrimary}
-          onPress={() => Alert.alert('Interested', 'Marked as interested!')}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.actionPrimaryText}>I'm Going</Text>
-          <Ionicons name="arrow-forward" size={18} color="#FFF" />
-        </TouchableOpacity>
+        {tier === 3 ? (
+          <View style={styles.actionBlocked}>
+            <Ionicons name="lock-closed-outline" size={16} color={TIER_CONFIG[3].color} />
+            <Text style={styles.actionBlockedText}>Not Available — Private Facility</Text>
+          </View>
+        ) : !hasCompatibleSports ? (
+          <View style={styles.actionBlocked}>
+            <Ionicons name="alert-circle-outline" size={16} color={TIER_CONFIG[3].color} />
+            <Text style={styles.actionBlockedText}>{NO_COMPATIBLE_SPORTS_REASON}</Text>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.actionPrimary}
+            onPress={() => {
+              if (!user) {
+                navigation.navigate('SignIn');
+                return;
+              }
+              if (!isEmailVerified) {
+                Alert.alert(
+                  'Verify Your Email',
+                  'Please check your inbox and click the verification link before creating a run.',
+                  [
+                    {
+                      text: 'Resend Email',
+                      onPress: async () => {
+                        const err = await resendVerificationEmail();
+                        if (err) Alert.alert('Error', err);
+                        else Alert.alert('Sent', 'Verification email resent. Check your inbox.');
+                      },
+                    },
+                    { text: 'OK', style: 'cancel' },
+                  ]
+                );
+                return;
+              }
+              const createRunParams = {
+                venueId,
+                venueName: venue.name,
+                sports: validSports as string[],
+                defaultSport: validSports[0] as string,
+              };
+              const proceed = () => {
+                if (!profile?.age_confirmed) {
+                  navigation.navigate('AgeConfirm', { pendingCreateRun: createRunParams });
+                } else {
+                  navigation.navigate('CreateRun', createRunParams);
+                }
+              };
+              if (tier === 2) {
+                Alert.alert('Public Space', TIER_2_DISCLAIMER, [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Continue', onPress: proceed },
+                ]);
+              } else {
+                proceed();
+              }
+            }}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="flash-outline" size={18} color="#FFF" />
+            <Text style={styles.actionPrimaryText}>Create Run Here</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -404,6 +536,25 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.bold,
     color: Colors.text.primary,
   },
+  emptyRunsCard: {
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: Spacing.xl,
+    paddingHorizontal: Spacing.base,
+    backgroundColor: Colors.bg.sheetCard,
+    borderRadius: Radius.xl,
+  },
+  emptyRunsTitle: {
+    fontSize: FontSize.base,
+    fontWeight: FontWeight.semibold,
+    color: Colors.text.primary,
+    marginTop: Spacing.xs,
+  },
+  emptyRunsSubtitle: {
+    fontSize: FontSize.sm,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+  },
   chatDisclaimer: {
     fontSize: FontSize.sm,
     color: Colors.text.tertiary,
@@ -476,5 +627,76 @@ const styles = StyleSheet.create({
     fontSize: FontSize.base,
     fontWeight: FontWeight.bold,
     color: '#FFF',
+  },
+  actionBlocked: {
+    flex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    borderRadius: Radius.full,
+    paddingVertical: Spacing.md,
+    backgroundColor: 'rgba(239,68,68,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.25)',
+  },
+  actionBlockedText: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: TIER_CONFIG[3].color,
+  },
+  tierBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.full,
+  },
+  tierBadgeText: {
+    fontSize: 10,
+    fontWeight: FontWeight.semibold,
+    letterSpacing: 0.1,
+  },
+
+  // ── Reservation section ────────────────────────────────────────────────────
+  reservationCard: {
+    backgroundColor: Colors.bg.sheetCard,
+    borderRadius: Radius.xl,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.base,
+    gap: Spacing.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Colors.border.light,
+  },
+  reservationStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  reservationStatusText: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+  },
+  busyHoursNote: {
+    fontSize: FontSize.sm,
+    color: Colors.text.secondary,
+    lineHeight: FontSize.sm * 1.5,
+  },
+  reserveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    alignSelf: 'flex-start',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.full,
+    backgroundColor: Colors.accent.orangeSubtle,
+    marginTop: Spacing.xs,
+  },
+  reserveBtnText: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: Colors.accent.orange,
   },
 });

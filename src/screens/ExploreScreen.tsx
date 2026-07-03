@@ -78,7 +78,7 @@ export function ExploreScreen() {
     // Filter chips
     if (activeFilters.includes('indoor')) filtered = filtered.filter((v) => v.indoorOutdoor !== 'outdoor');
     if (activeFilters.includes('outdoor')) filtered = filtered.filter((v) => v.indoorOutdoor !== 'indoor');
-    if (activeFilters.includes('popular_now')) filtered = filtered.filter((v) => v.popularityScore >= 75);
+    if (activeFilters.includes('popular_now')) filtered = filtered.filter((v) => (v.popularityScore ?? 0) >= 75);
     const sportFilters = activeFilters.filter((f) => FILTER_SPORTS.includes(f as SportId));
     if (sportFilters.length > 0) {
       filtered = filtered.filter((v) => sportFilters.some((s) => v.sports.includes(s as any)));
@@ -92,12 +92,12 @@ export function ExploreScreen() {
     // No search: apply sortBy option
     return [...filtered].sort((a, b) => {
       if (sortBy === 'distance') {
-        if (!coords) return b.popularityScore - a.popularityScore; // no location — most popular first
+        if (!coords) return (b.popularityScore ?? 0) - (a.popularityScore ?? 0); // no location — most popular first
         const da = haversineDistance(coords, a.coordinates);
         const db = haversineDistance(coords, b.coordinates);
         return da - db;
       }
-      if (sortBy === 'popularity') return b.popularityScore - a.popularityScore;
+      if (sortBy === 'popularity') return (b.popularityScore ?? 0) - (a.popularityScore ?? 0);
       if (sortBy === 'sport') return a.sports[0].localeCompare(b.sports[0]);
       return 0;
     });

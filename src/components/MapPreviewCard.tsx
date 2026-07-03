@@ -31,7 +31,7 @@ import { Colors } from '../constants/colors';
 import { FontSize, FontWeight } from '../constants/typography';
 import { Radius, Shadow, Spacing } from '../constants/spacing';
 import { SPORT_MAP } from '../constants/sports';
-import { formatDistance, haversineDistance } from '../utils/formatting';
+import { formatDistance, haversineDistance, formatAddress } from '../utils/formatting';
 import { useLocationContext } from '../context/LocationContext';
 
 interface MapPreviewCardProps {
@@ -181,7 +181,7 @@ export function MapPreviewCard({
           <View style={styles.metaRow}>
             <Ionicons name="location-outline" size={12} color={Colors.text.tertiary} />
             <Text style={styles.address} numberOfLines={1}>
-              {renderVenue.address}
+              {formatAddress(renderVenue.address)}
             </Text>
             <View style={styles.metaDivider} />
             <Text style={styles.distance}>{formatDistance(distance)}</Text>
