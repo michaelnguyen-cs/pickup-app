@@ -1,3 +1,4 @@
+/// <reference types="node" />
 // scripts/import-venues.ts
 //
 // Volleyball venue import for Massachusetts + New Hampshire.

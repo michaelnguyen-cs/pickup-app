@@ -64,12 +64,12 @@ function VenueImage({ uri, style, sportEmoji, sportColor, borderRadius = 0 }: Ve
     <View style={[style, { overflow: 'hidden', borderRadius }]}>
       {/* Skeleton — visible until image loads or errors */}
       {!loaded && !error && (
-        <View style={[StyleSheet.absoluteFillObject, styles.skeleton]} />
+        <View style={[StyleSheet.absoluteFill, styles.skeleton]} />
       )}
 
       {/* Error fallback — sport emoji on tinted background */}
       {error && (
-        <View style={[StyleSheet.absoluteFillObject, styles.errorBg, { backgroundColor: sportColor + '22' }]}>
+        <View style={[StyleSheet.absoluteFill, styles.errorBg, { backgroundColor: sportColor + '22' }]}>
           <Text style={styles.errorEmoji}>{sportEmoji}</Text>
         </View>
       )}
@@ -78,7 +78,7 @@ function VenueImage({ uri, style, sportEmoji, sportColor, borderRadius = 0 }: Ve
       {!error && (
         <Image
           source={{ uri }}
-          style={[StyleSheet.absoluteFillObject, { opacity: loaded ? 1 : 0 }]}
+          style={[StyleSheet.absoluteFill, { opacity: loaded ? 1 : 0 }]}
           onLoad={() => setLoaded(true)}
           onError={() => setError(true)}
           resizeMode="cover"

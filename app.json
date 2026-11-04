@@ -19,7 +19,8 @@
           "locationWhenInUsePermission": "Pick-Up uses your location to show nearby sports venues and pickup games."
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-status-bar"
     ],
     "ios": {
       "supportsTablet": true,

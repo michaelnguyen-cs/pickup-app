@@ -39,8 +39,8 @@ export function SignUpScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const passwordRef = useRef<TextInput>(null);
-  const confirmRef = useRef<TextInput>(null);
+  const passwordRef = useRef<React.ComponentRef<typeof TextInput>>(null);
+  const confirmRef = useRef<React.ComponentRef<typeof TextInput>>(null);
 
   const handleSignUp = async () => {
     setError(null);

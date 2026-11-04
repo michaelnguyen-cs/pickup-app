@@ -524,7 +524,7 @@ export function HomeScreen() {
       {/* ── Full-screen Map ──────────────────────────────────────────────── */}
       <MapView
         ref={mapRef}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         provider={PROVIDER_GOOGLE}
         customMapStyle={MAP_STYLE}
         initialRegion={FALLBACK_REGION}
