@@ -32,12 +32,18 @@ interface AuthContextValue {
   profile: ProfileRow | null;
   // true only during the initial session-from-storage check
   isLoading: boolean;
+  // Derived from user.email_confirmed_at — false for new unverified accounts
+  isEmailVerified: boolean;
   // Returns an error message string on failure, null on success
   signIn: (email: string, password: string) => Promise<string | null>;
   signUp: (email: string, password: string) => Promise<string | null>;
   signOut: () => Promise<void>;
   // Re-fetches the profile row — call after updating profile data
   refreshProfile: () => Promise<void>;
+  // Sends a new verification email to the current user's address
+  resendVerificationEmail: () => Promise<string | null>;
+  // Sets profiles.age_confirmed = true for the current user then refreshes profile
+  confirmAge: () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -45,10 +51,13 @@ const AuthContext = createContext<AuthContextValue>({
   user: null,
   profile: null,
   isLoading: true,
+  isEmailVerified: false,
   signIn: async () => null,
   signUp: async () => null,
   signOut: async () => {},
   refreshProfile: async () => {},
+  resendVerificationEmail: async () => null,
+  confirmAge: async () => null,
 });
 
 export function useAuthContext(): AuthContextValue {
@@ -136,9 +145,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) await loadProfile(user.id);
   }, [user, loadProfile]);
 
+  // Derived: truthy email_confirmed_at means Supabase has confirmed the address
+  const isEmailVerified = !!user?.email_confirmed_at;
+
+  const resendVerificationEmail = useCallback(async (): Promise<string | null> => {
+    if (!user?.email) return 'No email address on file.';
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: user.email,
+    });
+    return error?.message ?? null;
+  }, [user]);
+
+  const confirmAge = useCallback(async (): Promise<string | null> => {
+    if (!user) return 'Not signed in.';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase.from('profiles') as any)
+      .update({ age_confirmed: true })
+      .eq('id', user.id);
+    if (error) return error.message;
+    await loadProfile(user.id);
+    return null;
+  }, [user, loadProfile]);
+
   return (
     <AuthContext.Provider
-      value={{ session, user, profile, isLoading, signIn, signUp, signOut, refreshProfile }}
+      value={{
+        session, user, profile, isLoading,
+        isEmailVerified,
+        signIn, signUp, signOut, refreshProfile,
+        resendVerificationEmail, confirmAge,
+      }}
     >
       {children}
     </AuthContext.Provider>

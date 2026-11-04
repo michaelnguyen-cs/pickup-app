@@ -47,6 +47,9 @@ export const MOCK_VENUES: Venue[] = [
     maxOccupancy: 120,
     tags: ['open gym', 'student', 'multiple courts', 'air conditioned'],
     createdAt: '2024-01-01T00:00:00Z',
+    reservationPolicy: 'recommended',
+    reservationUrl: 'https://recreation.ucla.edu',
+    busyHoursNote: 'Courts peak after 6pm — plan ahead or come midday',
   },
   {
     id: 'v3',
@@ -89,6 +92,9 @@ export const MOCK_VENUES: Venue[] = [
     maxOccupancy: 80,
     tags: ['ymca', 'open gym', 'affordable', 'evening runs'],
     createdAt: '2024-01-01T00:00:00Z',
+    reservationPolicy: 'recommended',
+    reservationUrl: 'https://www.ymcaaustin.org',
+    busyHoursNote: 'Membership required. Open gym Mon–Fri evenings — arrive by 6:30pm to get a spot',
   },
   {
     id: 'v5',
@@ -130,6 +136,8 @@ export const MOCK_VENUES: Venue[] = [
     maxOccupancy: 32,
     tags: ['free', 'public', 'downtown', 'pickleball'],
     createdAt: '2024-01-01T00:00:00Z',
+    reservationPolicy: 'first_come',
+    busyHoursNote: 'Courts fill fast on weekend mornings — arrive before 9am',
   },
   {
     id: 'v7',
@@ -142,7 +150,7 @@ export const MOCK_VENUES: Venue[] = [
     coordinates: { latitude: 29.7199, longitude: -95.3422 },
     indoorOutdoor: 'both',
     surface: 'hardwood',
-    imageUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800',
+    imageUrl: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=800',
     description:
       'Large campus rec center with daily open gym. Basketball draws a strong evening crowd. Community members welcome.',
     amenities: ['parking', 'restrooms', 'lockers', 'showers', 'water fountain', 'café'],
@@ -163,7 +171,7 @@ export const MOCK_VENUES: Venue[] = [
     coordinates: { latitude: 40.7499, longitude: -73.8465 },
     indoorOutdoor: 'both',
     surface: 'indoor_court',
-    imageUrl: 'https://images.unsplash.com/photo-1595435742656-5272d0b3fa82?w=800',
+    imageUrl: 'https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=800',
     description:
       'Public tennis complex with both indoor and outdoor courts. Reservations available online. Open play slots on weekday mornings.',
     amenities: ['parking', 'restrooms', 'lockers', 'pro shop'],
@@ -173,5 +181,8 @@ export const MOCK_VENUES: Venue[] = [
     maxOccupancy: 60,
     tags: ['public', 'reservable', 'indoor + outdoor', 'open play'],
     createdAt: '2024-01-01T00:00:00Z',
+    reservationPolicy: 'required',
+    reservationUrl: 'https://www.nycgovparks.org/tennisreservations',
+    busyHoursNote: 'Open play slots on weekday mornings — courts book out by afternoon on weekends',
   },
 ];

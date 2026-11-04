@@ -35,6 +35,7 @@ export function SignUpScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [ageChecked, setAgeChecked] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -54,6 +55,10 @@ export function SignUpScreen() {
     }
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
+      return;
+    }
+    if (!ageChecked) {
+      setError('You must confirm you are at least 16 to create an account.');
       return;
     }
 
@@ -147,6 +152,20 @@ export function SignUpScreen() {
               onSubmitEditing={handleSignUp}
             />
           </View>
+
+          {/* Age confirmation */}
+          <TouchableOpacity
+            style={styles.ageRow}
+            onPress={() => setAgeChecked((v) => !v)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.ageCheckbox, ageChecked && styles.ageCheckboxChecked]}>
+              {ageChecked && <Ionicons name="checkmark" size={13} color="#FFF" />}
+            </View>
+            <Text style={styles.ageLabel}>
+              I confirm I am at least <Text style={styles.ageLabelBold}>16 years old</Text>
+            </Text>
+          </TouchableOpacity>
 
           {/* Inline error */}
           {error && (
@@ -283,5 +302,36 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontWeight: FontWeight.semibold,
     color: Colors.accent.orange,
+  },
+  ageRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.md,
+  },
+  ageCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: Colors.border.medium,
+    backgroundColor: Colors.bg.sheetCard,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+    flexShrink: 0,
+  },
+  ageCheckboxChecked: {
+    backgroundColor: Colors.accent.orange,
+    borderColor: Colors.accent.orange,
+  },
+  ageLabel: {
+    flex: 1,
+    fontSize: FontSize.sm,
+    color: Colors.text.secondary,
+    lineHeight: FontSize.sm * 1.45,
+  },
+  ageLabelBold: {
+    fontWeight: FontWeight.bold,
+    color: Colors.text.primary,
   },
 });

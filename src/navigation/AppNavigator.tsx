@@ -35,6 +35,10 @@ import { OnboardingSportsScreen } from '../screens/onboarding/OnboardingSportsSc
 import { OnboardingSkillPrefsScreen } from '../screens/onboarding/OnboardingSkillPrefsScreen';
 import { SignInScreen } from '../screens/auth/SignInScreen';
 import { SignUpScreen } from '../screens/auth/SignUpScreen';
+import { AdminCandidateReviewScreen } from '../screens/admin/AdminCandidateReviewScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
+import { CreateRunScreen } from '../screens/CreateRunScreen';
+import { AgeConfirmScreen } from '../screens/auth/AgeConfirmScreen';
 
 import { Colors } from '../constants/colors';
 import { FontSize, FontWeight } from '../constants/typography';
@@ -133,7 +137,7 @@ export function AppNavigator() {
         ) : (
           // ── Main app ──────────────────────────────────────────────────────────
           <>
-            <Stack.Screen name="Home" component={TabNavigator} />
+            <Stack.Screen name="MainTabs" component={TabNavigator} />
             <Stack.Screen
               name="VenueDetail"
               component={VenueDetailScreen}
@@ -153,6 +157,26 @@ export function AppNavigator() {
             <Stack.Screen
               name="SignUp"
               component={SignUpScreen}
+              options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+            />
+            <Stack.Screen
+              name="AdminCandidateReview"
+              component={AdminCandidateReviewScreen}
+              options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+            />
+            <Stack.Screen
+              name="Settings"
+              component={SettingsScreen}
+              options={{ presentation: 'card', animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+              name="CreateRun"
+              component={CreateRunScreen}
+              options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+            />
+            <Stack.Screen
+              name="AgeConfirm"
+              component={AgeConfirmScreen}
               options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
             />
           </>

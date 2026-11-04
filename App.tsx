@@ -15,6 +15,8 @@ import { LocationProvider } from './src/context/LocationContext';
 import { SavedProvider } from './src/context/SavedContext';
 import { PrefsProvider } from './src/context/PrefsContext';
 import { AuthProvider } from './src/context/AuthContext';
+import { MapFocusProvider } from './src/context/MapFocusContext';
+import { ActiveRunProvider } from './src/context/ActiveRunContext';
 
 export default function App() {
   return (
@@ -26,8 +28,12 @@ export default function App() {
           <AuthProvider>
             <SavedProvider>
               <PrefsProvider>
-                <StatusBar style="light" />
-                <AppNavigator />
+                <MapFocusProvider>
+                  <ActiveRunProvider>
+                    <StatusBar style="light" />
+                    <AppNavigator />
+                  </ActiveRunProvider>
+                </MapFocusProvider>
               </PrefsProvider>
             </SavedProvider>
           </AuthProvider>

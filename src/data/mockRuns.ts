@@ -30,6 +30,7 @@ export const MOCK_RECURRING_RUNS: RecurringRun[] = [
     popularityScore: 97,
     tags: ['free', 'competitive', 'legendary', 'evening'],
     isVerified: true,
+    isIndoor: false,
     createdAt: '2024-01-01T00:00:00Z',
   },
   {
@@ -59,6 +60,7 @@ export const MOCK_RECURRING_RUNS: RecurringRun[] = [
     popularityScore: 88,
     tags: ['open gym', 'student', 'daily', 'full court'],
     isVerified: true,
+    isIndoor: true,
     createdAt: '2024-01-01T00:00:00Z',
   },
   {
@@ -84,6 +86,7 @@ export const MOCK_RECURRING_RUNS: RecurringRun[] = [
     popularityScore: 79,
     tags: ['ymca', 'organized', 'weekly', 'all welcome'],
     isVerified: true,
+    isIndoor: true,
     createdAt: '2024-01-01T00:00:00Z',
   },
   {
@@ -106,6 +109,7 @@ export const MOCK_RECURRING_RUNS: RecurringRun[] = [
     popularityScore: 92,
     tags: ['beach', 'free', 'weekend', 'casual', 'scenic'],
     isVerified: true,
+    isIndoor: false,
     createdAt: '2024-01-01T00:00:00Z',
   },
   {
@@ -130,6 +134,7 @@ export const MOCK_RECURRING_RUNS: RecurringRun[] = [
     popularityScore: 74,
     tags: ['morning', 'lakefront', 'all paces', 'free'],
     isVerified: true,
+    isIndoor: false,
     createdAt: '2024-01-01T00:00:00Z',
   },
   {
@@ -156,6 +161,7 @@ export const MOCK_RECURRING_RUNS: RecurringRun[] = [
     popularityScore: 73,
     tags: ['pickleball', 'morning', 'downtown', 'free', 'growing'],
     isVerified: false,
+    isIndoor: false,
     createdAt: '2024-01-01T00:00:00Z',
   },
   {
@@ -181,6 +187,7 @@ export const MOCK_RECURRING_RUNS: RecurringRun[] = [
     popularityScore: 78,
     tags: ['indoor', 'coed', 'evening', 'university'],
     isVerified: true,
+    isIndoor: true,
     createdAt: '2024-01-01T00:00:00Z',
   },
 ];
