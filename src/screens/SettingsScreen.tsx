@@ -23,6 +23,10 @@ import { FontSize, FontWeight } from '../constants/typography';
 import { Radius, Spacing } from '../constants/spacing';
 import { useLocationContext } from '../context/LocationContext';
 
+// Support contact address. Intentionally empty — no support inbox exists yet.
+// Set this to a real monitored address to surface the "Report a bug" row.
+const SUPPORT_EMAIL = '';
+
 type SettingRowProps = {
   icon: React.ComponentProps<typeof Ionicons>['name'];
   label: string;
@@ -132,11 +136,13 @@ export function SettingsScreen() {
         <View style={styles.section}>
           <SettingRow icon="golf-outline" label="App" value="Pick-Up" />
           <SettingRow icon="code-slash-outline" label="Version" value="1.0.0" />
-          <SettingRow
-            icon="bug-outline"
-            label="Report a bug"
-            onPress={() => Linking.openURL('mailto:support@pickupapp.io')}
-          />
+          {SUPPORT_EMAIL !== '' && (
+            <SettingRow
+              icon="bug-outline"
+              label="Report a bug"
+              onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
+            />
+          )}
         </View>
 
         <View style={{ height: Spacing.xxxl }} />
