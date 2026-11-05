@@ -31,6 +31,7 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
 
 # scripts — local credentials and generated output (never commit real keys)
@@ -43,3 +44,6 @@ scripts/output/
 # generated native folders
 /ios
 /android
+
+# local handoff notes (never commit)
+HANDOFF.md
